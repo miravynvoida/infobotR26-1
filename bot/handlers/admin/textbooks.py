@@ -156,6 +156,10 @@ async def tb_new_finish_none(cb: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "atb:done")
 async def tb_new_finish(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    if not data.get("disc_id"):
+        await state.clear()
+        await cb.answer("Сессия ввода устарела — начните заново", show_alert=True)
+        return
     if data.get("fmsg"):
         try:
             await cb.bot.delete_message(cb.message.chat.id, data["fmsg"])

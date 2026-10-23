@@ -76,12 +76,16 @@ async def student_add_prompt(cb: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("adm:stu:"))
 async def student_actions(cb: CallbackQuery, state: FSMContext):
+    # форматы: adm:stu:{id} (просмотр) и adm:stu:{action}:{id}
     parts = cb.data.split(":")
-    st = db.student_by_id(int(parts[2]))
+    if len(parts) == 3 and parts[2].isdigit():
+        action, sid = "view", int(parts[2])
+    else:
+        action, sid = parts[2], int(parts[3])
+    st = db.student_by_id(sid)
     if st is None:
         await cb.answer("Не найден", show_alert=True)
         return
-    action = parts[3] if len(parts) > 3 else "view"
 
     if action == "view":
         await cb.answer()
@@ -105,7 +109,7 @@ async def student_actions(cb: CallbackQuery, state: FSMContext):
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [InlineKeyboardButton(text="🗑 Да, удалить", callback_data=f"adm:stu:del:{st['id']}")],
-                    [InlineKeyboardButton(text="◀ Отмена", callback_data=f"adm:stu:{st['id']}")],
+                    [InlineKeyboardButton(text="◀ Отмена", callback_data=f"adm:stu:view:{st['id']}")],
                 ]
             ),
         )
