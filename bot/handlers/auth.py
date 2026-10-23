@@ -13,6 +13,7 @@ from ..keyboards import (
 )
 from ..services import schedule_utils as su
 from ..states import AuthSG, OnbSG
+from .menu import send_main
 
 router = Router()
 
@@ -176,9 +177,7 @@ async def onb_theme(cb: CallbackQuery, state: FSMContext, student: dict):
         "приходят всегда — их отключить нельзя."
     )
     await state.clear()
-    from .menu import send_main as _send_main
-
-    await _send_main(cb.message, student)
+    await send_main(cb.message, student)
     await cb.answer()
 
 

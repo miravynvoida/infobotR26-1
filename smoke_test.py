@@ -46,6 +46,7 @@ s8, e8 = su.week_bounds(8)
 check("границы 8-й недели 19–25.10", s8 == date(2026, 10, 19) and e8 == date(2026, 10, 25))
 
 print("== импорт JSON (пример пользователя) ==")
+TOMORROW = su.iso(su.today() + __import__("datetime").timedelta(days=1))
 sample = {
     "format_version": 1,
     "group": "Р 26-1",
@@ -59,6 +60,7 @@ sample = {
                 {"date": "2026-10-23", "start": "10:10", "end": "11:40", "discipline": "Физ. культура", "lesson_type": "ПР", "room": "С/зал"},
                 {"date": "2026-10-23", "start": "11:50", "end": "13:20", "discipline": "Математика", "lesson_type": "ПР", "room": "417"},
                 {"date": "2026-10-24", "start": "08:30", "end": "10:00", "discipline": "Информатика", "lesson_type": "ПР", "room": "417"},
+                {"date": TOMORROW, "start": "08:30", "end": "10:00", "discipline": "Математика", "lesson_type": "ЛЕК", "room": "415"},
             ],
         }
     ],
@@ -66,8 +68,8 @@ sample = {
 }
 report = su.import_schedule_json(json.dumps(sample, ensure_ascii=False))
 check("импорт: 1 неделя", report["weeks"] == 1)
-check("импорт: 2 дня", report["days"] == 2)
-check("импорт: 4 занятия", report["lessons"] == 4)
+check("импорт: 3 дня", report["days"] == 3, report["days"])
+check("импорт: 5 занятий", report["lessons"] == 5, report["lessons"])
 lessons = db.day_lessons("2026-10-23")
 check("3 пары 23.10", len(lessons) == 3, lessons)
 check("пара 2 = Физ. культура", lessons[1]["discipline"] == "Физ. культура" and lessons[1]["pair_no"] == 2)
@@ -95,11 +97,11 @@ check("14:00 — пар больше нет", "пар больше нет" in su
 
 print("== ДЗ ==")
 did = db.discipline_by_name("Математика")["id"]
-hid = db.create_hw(did, "Логарифмы", "№ 45–50 из учебника", "2026-10-23", "ПР", None, [], su.ts(), 1)
+hid = db.create_hw(did, "Логарифмы", "№ 45–50 из учебника", su.iso(su.today()), "ПР", None, [], su.ts(), 1)
 hw = db.hw_by_id(hid)
 check("создано ДЗ", hw["title"] == "Логарифмы")
-check("опции сдачи от расписания", [o["date"] for o in su.next_lesson_options(did)][0] == "2026-10-23")
-db.archive_due_homework("2026-10-23", su.ts())
+check("опции сдачи от расписания", [o["date"] for o in su.next_lesson_options(did)][0] == TOMORROW)
+db.archive_due_homework(su.iso(su.today()), su.ts())
 check("архивация в день сдачи", db.hw_by_id(hid)["archived"] == 1)
 
 print("== оценки (парсер) ==")

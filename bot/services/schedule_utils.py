@@ -302,8 +302,9 @@ def import_schedule_json(text: str) -> dict:
         for l in lessons:
             try:
                 day = date.fromisoformat(str(l["date"])).isoformat()
-                start, end = str(l["start"])[:5], str(l["end"])[:5]
-                parse_hm(start), parse_hm(end)
+                start, end = str(l["start"])[:5].strip(), str(l["end"])[:5].strip()
+                if parse_hm(start) is None or parse_hm(end) is None:
+                    raise ValueError(f"время должно быть в формате ЧЧ:ММ ({l.get('start')}–{l.get('end')})")
                 name = str(l["discipline"]).strip()
             except Exception:
                 warnings.append(f"Пропущена некорректная запись: {json.dumps(l, ensure_ascii=False)[:120]}")
