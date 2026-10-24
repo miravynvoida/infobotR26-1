@@ -205,6 +205,10 @@ def init() -> None:
         cols = {r["name"] for r in q("PRAGMA table_info(notify_settings)")}
         if "quiet" not in cols:
             _conn.execute("ALTER TABLE notify_settings ADD COLUMN quiet INTEGER NOT NULL DEFAULT 0")
+        if "hw_tomorrow" not in cols:
+            _conn.execute("ALTER TABLE notify_settings ADD COLUMN hw_tomorrow INTEGER NOT NULL DEFAULT 1")
+        if "hw_tomorrow_time" not in cols:
+            _conn.execute("ALTER TABLE notify_settings ADD COLUMN hw_tomorrow_time TEXT NOT NULL DEFAULT '18:00'")
         _conn.commit()
     if not q("SELECT 1 FROM students LIMIT 1"):
         codes: list[tuple[str, str]] = []
@@ -634,3 +638,23 @@ def kv_items(prefix: str) -> list[tuple[str, str]]:
 
 def kv_delete(key: str) -> None:
     ex("DELETE FROM kv WHERE key=?", (key,))
+
+
+def checkpoint() -> None:
+    """Слить WAL в основной файл (для бэкапа)."""
+    with _lock:
+        _conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        _conn.commit()
+
+
+def swap_database(new_path: str) -> None:
+    """Подменить базу файла (бэкап/восстановление) и переподключиться."""
+    global _conn
+    with _lock:
+        _conn.commit()
+        _conn.close()
+        import shutil
+
+        shutil.copyfile(new_path, config.cfg.db_path)
+        _conn = None
+    connect()

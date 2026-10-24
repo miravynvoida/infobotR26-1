@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from .. import db
-from ..keyboards import cab_kb, minutes_kb, times_kb
+from ..keyboards import cab_kb, hw_times_kb, minutes_kb, times_kb
 from ..services import schedule_utils as su
 from ..states import CabSG
 
@@ -136,6 +136,36 @@ async def quiet_toggle(cb: CallbackQuery, student: dict):
     new = 0 if s.get("quiet") else 1
     db.update_settings(student["id"], quiet=new)
     await cb.answer("😴 Тихая пара: ВКЛ (напоминания молчат на парах)" if new else "😴 Тихая пара: ВЫКЛ")
+    await render(cb, student)
+
+
+@router.callback_query(F.data == "cab:hw:tgl")
+async def hw_tmw_toggle(cb: CallbackQuery, student: dict):
+    s = db.get_settings(student["id"])
+    new = 0 if s.get("hw_tomorrow") else 1
+    db.update_settings(student["id"], hw_tomorrow=new)
+    await cb.answer("📚 Напоминания о ДЗ на завтра: ВКЛ" if new else "📚 Напоминания о ДЗ: ВЫКЛ")
+    await render(cb, student)
+
+
+@router.callback_query(F.data == "cab:hw:menu")
+async def hw_tmw_menu(cb: CallbackQuery):
+    await cb.answer()
+    try:
+        await cb.message.edit_text("🕐 Во сколько напоминать о ДЗ на завтра?", reply_markup=hw_times_kb())
+    except TelegramBadRequest:
+        pass
+
+
+@router.callback_query(F.data.startswith("cab:hw:"))
+async def hw_tmw_set(cb: CallbackQuery, student: dict):
+    parts = cb.data.split(":")
+    val = f"{parts[2]}:{parts[3]}" if len(parts) >= 4 else ""
+    if su.parse_hm(val) is None:
+        await cb.answer()
+        return
+    db.update_settings(student["id"], hw_tomorrow=1, hw_tomorrow_time=val)
+    await cb.answer(f"✅ Буду напоминать о ДЗ в {val}")
     await render(cb, student)
 
 

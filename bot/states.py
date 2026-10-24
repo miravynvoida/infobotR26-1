@@ -71,3 +71,8 @@ class StudNewSG(StatesGroup):
 class BcSG(StatesGroup):
     text = State()
     confirm = State()
+
+
+class MntSG(StatesGroup):
+    until = State()
+    restore = State()

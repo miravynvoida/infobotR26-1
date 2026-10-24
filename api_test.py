@@ -14,7 +14,7 @@ import json  # noqa: E402
 import httpx  # noqa: E402
 
 from bot import db  # noqa: E402
-from bot.api import app  # noqa: E402
+from bot.api import app, make_token  # noqa: E402
 from bot.services import schedule_utils as su  # noqa: E402
 
 db.init()
@@ -151,12 +151,37 @@ async def main():
         check("/api/rating skips", r.status_code == 200)
         r = await c.get("/api/rating?sort=late", headers=h)
         check("/api/rating late", r.status_code == 200)
+        r = await c.post("/api/admin/maintenance", json={"on": True, "until": "01.01.2030 00:00"}, headers=h)
+        check("тех.работы вкл", r.status_code == 200, r.text[:100])
+        st2 = db.all_students()[1]
+        db.link_tg(st2["id"], 222222222)
+        anon_headers = {"Authorization": "Bearer " + make_token(222222222)}
+        r = await c.get("/api/today", headers=anon_headers)
+        check("не-админ при тех.работах -> 503", r.status_code == 503, r.status_code)
+        r = await c.get("/api/today", headers=h)
+        check("админ при тех.работах работает", r.status_code == 200, r.status_code)
         r = await c.get("/api/admin/day-notices", headers=h)
         check("day-notices список", r.status_code == 200 and any(x["date"] == "2026-11-03" for x in r.json()["items"]), r.text[:150])
         r = await c.delete("/api/admin/day-notice/2026-11-03", headers=h)
         check("day-notice удаление", r.status_code == 200)
         r = await c.get("/api/schedule/day/2026-11-03", headers=h)
         check("day-notice снят", r.json().get("day_notice") == "", r.text[:150])
+        r = await c.post("/api/admin/maintenance", json={"on": False}, headers=h)
+        check("тех.работы выкл", r.status_code == 200)
+        r = await c.get("/api/today", headers=h)
+        check("после выкл доступ вернулся", r.status_code == 200)
+        r = await c.post("/api/admin/exam-week", json={"on": True}, headers=h)
+        check("контрольная вкл", r.status_code == 200)
+        r = await c.get("/api/grades", headers=h)
+        g6 = r.json()
+        check("exam_week в оценках", g6.get("exam_week") is True, r.text[:120])
+        check("risk_ids список", isinstance(g6.get("risk_ids"), list))
+        r = await c.post("/api/admin/exam-week", json={"on": False}, headers=h)
+        r = await c.get("/api/admin/backup", headers=h)
+        check("бэкап скачивается", r.status_code == 200 and r.headers["content-type"].startswith("application/octet-stream"))
+        backup_bytes = r.content
+        r = await c.post("/api/admin/restore", files={"file": ("b.db", backup_bytes, "application/octet-stream")}, headers=h)
+        check("бэкап загружается обратно", r.status_code == 200, r.text[:150])
         r = await c.get("/api/me")
         check("без токена — 401", r.status_code == 401)
 

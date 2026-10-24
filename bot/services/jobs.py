@@ -112,6 +112,20 @@ async def tick(bot: Bot) -> None:
                     )
                     await _safe_send(bot, s["tg_id"], text=text)
 
+    # --- напоминания о ДЗ на завтра (независимые, своё время)
+    tomorrow_iso = su.iso(n.date() + timedelta(days=1))
+    hw_due = db.hw_due_on(tomorrow_iso)
+    for s in db.all_notify_settings():
+        if not hw_due or not s.get("hw_tomorrow"):
+            continue
+        tt = su.parse_hm(s.get("hw_tomorrow_time") or "18:00")
+        if tt and _same_hm(n.time(), tt) and db.notif_once(day, "hw_tmrw", str(s["tg_id"])):
+            text = "📚 <b>ДЗ к завтрашнему дню:</b>\n" + "\n".join(
+                f"• {h['emoji']} {su.esc(h['discipline'])} — «{su.esc(h['title'])}»"
+                f" (до {su.fmt_dm(h['due_date'])})" for h in hw_due
+            )
+            await _safe_send(bot, s["tg_id"], text=text)
+
     # --- расписание на завтра (у каждого своё время)
     tomorrow = su.iso(n.date() + timedelta(days=1))
     tmrw_lessons = db.day_lessons(tomorrow)

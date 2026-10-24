@@ -35,6 +35,15 @@
     try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(kind || "light"); } catch (e) {}
   }
 
+  function renderMaintenanceScreen(until) {
+    appEl.innerHTML = `
+      <div class="boot">
+        <div class="boot-logo">🛠</div>
+        <div class="boot-title">Технические работы</div>
+        <div class="boot-sub">${until ? "до " + esc(until) : "скоро всё вернёмся"}</div>
+      </div>`;
+  }
+
   async function api(path, opts) {
     opts = opts || {};
     const conf = { method: opts.method || "GET", headers: {} };
@@ -42,6 +51,12 @@
     if (opts.body !== undefined) { conf.headers["Content-Type"] = "application/json"; conf.body = JSON.stringify(opts.body); }
     const r = await fetch("/api" + path, conf);
     if (r.status === 401) { renderBootError("Сессия истекла. Закройте и откройте приложение заново."); throw new Error("unauthorized"); }
+    if (r.status === 503) {
+      let until = "";
+      try { until = String(data.detail || "").replace("tech_works:", ""); } catch (e) {}
+      renderMaintenanceScreen(until);
+      throw new Error("maintenance");
+    }
     let data = null;
     try { data = await r.json(); } catch (e) {}
     if (!r.ok) {
@@ -222,10 +237,13 @@
     haptic("light");
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
     const v = $("#view");
-    if (tab === "main") viewMain(v);
-    else if (tab === "schedule") viewSchedule(v);
-    else if (tab === "grades") viewGrades(v);
-    else if (tab === "profile") viewProfile(v);
+    const run = async (fn) => {
+      try { await fn(v); } catch (e) { v.innerHTML = `<div class="card"><div class="empty">Ошибка экрана: ${esc(e && e.message || e)}</div></div>`; }
+    };
+    if (tab === "main") run(viewMain);
+    else if (tab === "schedule") run(viewSchedule);
+    else if (tab === "grades") run(viewGrades);
+    else if (tab === "profile") run(viewProfile);
     window.scrollTo(0, 0);
   }
 
@@ -353,22 +371,10 @@
       </div>`;
     }
 
-    let html = `
-      <div class="section-head"><div>
-        <div class="section-title">${hello}, ${esc(firstName)}!</div>
-        <div class="section-sub">${today.weekday}, ${fmtDate(today.date)}${today.week_number ? " · учебная неделя " + today.week_number : ""}</div>
-      </div></div>
-      ${profileCard(state.me)}
-      ${dlCard}
-      ${semCard}
-      <div class="tiles tiles-2">
-        <div class="tile wide" data-act="hw"><div class="tile-ico">${I.task}</div><div class="tile-body"><div class="tile-name">Домашнее задание</div><div class="tile-sub">${newHw === 1 ? "1 новое" : newHw ? newHw + " новых" : "всё просмотрено"}</div></div>${newHw ? `<div class="dot">${newHw}</div>` : ""}</div>
-        <div class="tile wide" data-act="tb"><div class="tile-ico">${I.book}</div><div class="tile-body"><div class="tile-name">Учебники</div><div class="tile-sub">материалы дисциплин</div></div></div>
-      </div>
-      <div id="pair-timer"></div>`;
-
+    let attHtml = "";
+    let staffHtml = "";
     if (att.active && !att.response) {
-      html += `<div class="att-card" id="att-card">
+      attHtml += `<div class="att-card" id="att-card">
         <div class="att-q">Будете ли вы сегодня на парах?</div>
         <div class="att-sub">Первая пара в ${esc(att.first_start)}. Ответ увидят староста и зам. Отметиться можно до конца последней пары.</div>
         <div class="att-grid">
@@ -381,16 +387,28 @@
       </div>`;
     } else if (att.active && att.response) {
       const labels = { full: "Вы будете на всех парах", none: "Вас сегодня не будет", sick: "Вы болеете", partial: "Вы будете частично" };
-      html += `<div class="att-card"><div class="att-q">${labels[att.response.status] || ""}</div>
+      attHtml += `<div class="att-card"><div class="att-q">${labels[att.response.status] || ""}</div>
         <button class="btn sm ghost" id="att-reset">Сбросить мой ответ</button></div>`;
     }
 
     if (summ) {
-      html += staffSummaryCard(summ);
+      staffHtml = staffSummaryCard(summ);
     }
 
-    html += `<div class="card"><div class="card-title">Расписание на сегодня<span class="right">${today.lessons.length} пар</span></div>
-      <div id="today-lessons">${lessonsBlock(today.lessons, "Сегодня пар нет")}</div></div>`;
+    let html = `
+      <div class="section-head"><div>
+        <div class="section-title">${hello}, ${esc(firstName)}!</div>
+        <div class="section-sub">${today.weekday}, ${fmtDate(today.date)}${today.week_number ? " · учебная неделя " + today.week_number : ""}</div>
+      </div></div>
+      ${profileCard(state.me)}
+      <div class="tiles tiles-2">
+        <div class="tile wide" data-act="hw"><div class="tile-ico">${I.task}</div><div class="tile-body"><div class="tile-name">Домашнее задание</div><div class="tile-sub">${newHw === 1 ? "1 новое" : newHw ? newHw + " новых" : "всё просмотрено"}</div></div>${newHw ? `<div class="dot">${newHw}</div>` : ""}</div>
+        <div class="tile wide" data-act="tb"><div class="tile-ico">${I.book}</div><div class="tile-body"><div class="tile-name">Учебники</div><div class="tile-sub">материалы дисциплин</div></div></div>
+      </div>
+      <div id="pair-timer"></div>
+      ${dlCard}
+      ${attHtml}
+      ${staffHtml}`;
 
     v.innerHTML = html;
     $("#profile-card").addEventListener("click", () => showTab("profile"));
@@ -536,10 +554,15 @@
       try { const dd = await api("/schedule/day/" + state.sch.date); dayNotice = dd.day_notice || ""; } catch (e) {}
     }
 
+    const sem = state.me.semester || {};
+    const semBar = sem && sem.total
+      ? `<div class="card sem-card"><div class="timer-top"><span>Учебная неделя ${sem.week} из ${sem.total}${sem.perfect_week ? " · ✓ идеальная неделя" : ""}</span><b>${sem.pct}%</b></div><div class="timer-bar"><div style="width:${sem.pct}%"></div></div></div>`
+      : "";
     v.innerHTML = `
       <div class="section-head"><div>
         <div class="section-title">Расписание</div>
       </div></div>
+      ${semBar}
       <div class="sch-controls">
         <button class="select-btn" id="week-sel">${I.cal}<span>${w ? "Неделя " + w.n + " · " + fmtDateShort(w.start) + "–" + fmtDateShort(w.end) : "Выбрать неделю"}</span></button>
         <button class="select-btn sq" id="day-sel" title="Календарь">${I.cal}</button>
@@ -653,7 +676,9 @@
     try { g = await api("/grades"); } catch (e) { v.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
     const pct = g.avg == null ? 0 : Math.min(1, g.avg / 5);
     const C = 2 * Math.PI * 36;
+    const riskIds = new Set(g.risk_ids || []);
     v.innerHTML = `
+      ${g.exam_week ? '<div class="exam-banner">Идёт контрольная неделя!</div>' : ""}
       <div class="section-head"><div>
         <div class="section-title">Оценки</div>
       </div></div>
@@ -682,7 +707,7 @@
           <div class="disc-row" data-disc="${d.id}">
             <div class="disc-head">
               ${discChip(d.name)}
-              <div class="disc-name">${esc(d.name)}</div>
+              <div class="disc-name">${esc(d.name)}${g.exam_week && riskIds.has(d.id) ? '<span class="risk-badge">риск</span>' : ""}</div>
               <div class="disc-avg">${fmtAvg(d.avg)}</div>
               <span class="chevron">${I.chev}</span>
             </div>
@@ -709,18 +734,17 @@
     let r;
     try { r = await api("/rating?sort=" + sort); } catch (e) { box.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
     const sorts = [
-      { k: "avg", label: "По успеваемости" },
-      { k: "skips", label: "По пропускам (Н)" },
-      { k: "late", label: "По опозданиям (О)" },
+      { k: "avg", label: "Успеваемости" },
+      { k: "skips", label: "Пропускам" },
     ];
     const medals = ["🥇", "🥈", "🥉"];
-    const val = (it) => sort === "avg" ? fmtAvg(it.avg) : sort === "skips" ? it.h : it.o;
+    const cur = sorts.find((x) => x.k === sort) || sorts[0];
+    const val = (it) => sort === "skips" ? it.h : fmtAvg(it.avg);
+    const valLabel = sort === "skips" ? "пропусков" : "средний";
     box.innerHTML = `
-      <div class="chips" style="margin-bottom:10px">
-        ${sorts.map((x) => `<div class="chip ${x.k === sort ? "on" : ""}" data-sort="${x.k}" style="padding:9px 10px">${x.label}</div>`).join("")}
-      </div>
+      <button class="btn select-btn" id="rating-sort" style="margin:0 0 10px">Сортировать по: ${cur.label} ▾</button>
       <div class="card rating-list">
-        ${r.items.map((it, i) => `
+        ${r.items.map((it) => `
           <div class="rate-row ${it.pos <= 3 && sort === "avg" ? "top" : ""}">
             <span class="rate-pos">${sort === "avg" && it.pos <= 3 ? medals[it.pos - 1] : it.pos}</span>
             ${discChip(it.short)}
@@ -728,9 +752,12 @@
             <b class="rate-val">${val(it)}</b>
           </div>`).join("") || '<div class="empty">Пока нет данных — синхронизируйте оценки</div>'}
       </div>`;
-    box.querySelectorAll("[data-sort]").forEach((c) => c.addEventListener("click", () => {
-      box.dataset.sort = c.dataset.sort; haptic("light"); renderRating(box);
-    }));
+    const sortBtn = box.querySelector("#rating-sort");
+    if (sortBtn) sortBtn.addEventListener("click", () => {
+      sheetOptions("Сортировать по", sorts.map((x) => ({ label: x.label, value: x.k, on: x.k === sort })), (k) => {
+        box.dataset.sort = k; haptic("light"); renderRating(box);
+      });
+    });
   }
 
   function gradePill(x) {
@@ -783,6 +810,13 @@
           <div class="set-ctrl"><div class="switch ${s.quiet ? "on" : ""}" id="q-sw"></div></div>
         </div>
         <div class="set-row">
+          <div><div class="set-name">ДЗ на завтра</div><div class="set-sub">Отдельное напоминание, не зависит от расписания</div></div>
+          <div class="set-ctrl">
+            <select class="mini-select" id="hw-tm-time">${["16:00", "17:00", "18:00", "19:00", "20:00", "21:00"].map((t) => `<option ${s.hw_tomorrow_time === t ? "selected" : ""}>${t}</option>`).join("")}</select>
+            <div class="switch ${s.hw_tomorrow ? "on" : ""}" id="hw-tm-sw"></div>
+          </div>
+        </div>
+        <div class="set-row">
           <div><div class="set-name">Важные и новые ДЗ</div><div class="set-sub">Посещаемость тоже</div></div>
           <div class="set-ctrl"><span class="locked">всегда включено</span></div>
         </div>
@@ -832,6 +866,17 @@
       e.currentTarget.classList.toggle("on", on); haptic("medium");
       me.settings.quiet = on; await setSave({ quiet: on });
       toast(on ? "Тихая пара включена" : "Тихая пара выключена");
+    });
+    const hwsw = $("#hw-tm-sw");
+    if (hwsw) hwsw.addEventListener("click", async (e) => {
+      const on = !e.currentTarget.classList.contains("on");
+      e.currentTarget.classList.toggle("on", on); haptic("medium");
+      me.settings.hw_tomorrow = on; await setSave({ hw_tomorrow: on });
+    });
+    const hwtime = $("#hw-tm-time");
+    if (hwtime) hwtime.addEventListener("change", async (e) => {
+      me.settings.hw_tomorrow_time = e.target.value;
+      await setSave({ hw_tomorrow_time: e.target.value, hw_tomorrow: true });
     });
     document.querySelectorAll("#theme-seg button").forEach((b) => b.addEventListener("click", async () => {
       applyTheme(b.dataset.t); me.settings.theme = b.dataset.t;

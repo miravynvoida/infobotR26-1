@@ -7,9 +7,10 @@ inline-кнопки для неавторизованных (у них всё р
 """
 from aiogram import BaseMiddleware
 from aiogram.filters import BaseFilter
-from aiogram.types import CallbackQuery, TelegramObject
+from aiogram.types import CallbackQuery, Message, TelegramObject
 
 from . import config, db
+from .services import maintenance as mnt
 
 
 class AuthMiddleware(BaseMiddleware):
@@ -22,6 +23,14 @@ class AuthMiddleware(BaseMiddleware):
             data["is_staff"] = user.id in config.cfg.staff_ids
             if student is None and isinstance(event, CallbackQuery):
                 await event.answer("⛔ Нет доступа. Войдите через /start", show_alert=True)
+                return
+            st = mnt.maintenance_state()
+            if st["on"] and user.id not in config.cfg.admin_ids:
+                text = mnt.maintenance_text()
+                if isinstance(event, Message):
+                    await event.answer(text)
+                else:
+                    await event.answer("🛠 Тех. работы — бот временно недоступен", show_alert=True)
                 return
         return await handler(event, data)
 

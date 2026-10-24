@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import hmac
+import os
 import json
 import time
 from datetime import date, datetime, timedelta
@@ -10,11 +11,13 @@ from urllib.parse import parse_qsl
 
 import httpx
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config, db
 from .services import attendance as att_svc
+from .services import maintenance as mnt
 from .services import schedule_utils as su
 from .services.grades import sync_grades
 from .services.tg_files import (
@@ -25,6 +28,8 @@ from .services.tg_files import (
 )
 
 app = FastAPI(title="R26-1 API", docs_url=None, redoc_url=None, openapi_url=None)
+
+db.init()  # чтобы приложение поднималось и само по себе (uvicorn bot.api:app)
 
 WEBAPP_DIR = Path(__file__).resolve().parent.parent / "webapp"
 TOKEN_TTL = 30 * 24 * 3600
@@ -73,6 +78,12 @@ class AuthBody(BaseModel):
     init_data: str = ""
 
 
+@app.get("/api/maintenance")
+def api_maintenance():
+    st = mnt.maintenance_state()
+    return {"on": st["on"], "until": st["until"] if st["on"] else None}
+
+
 @app.post("/api/auth")
 async def api_auth(body: AuthBody):
     if body.init_data:
@@ -88,6 +99,9 @@ async def api_auth(body: AuthBody):
     student = db.student_by_tg(tg_id)
     if student is None:
         raise HTTPException(403, "Вы не авторизованы в боте. Нажмите /start у бота.")
+    st = mnt.maintenance_state()
+    if st["on"] and tg_id not in config.cfg.admin_ids:
+        raise HTTPException(503, f"tech_works:{st['until'] or ''}")
     return {
         "token": make_token(tg_id),
         "is_admin": tg_id in config.cfg.admin_ids,
@@ -103,6 +117,9 @@ def cur(request: Request) -> dict:
     student = db.student_by_tg(tg_id)
     if student is None:
         raise HTTPException(403, "Не авторизован")
+    st = mnt.maintenance_state()
+    if st["on"] and tg_id not in config.cfg.admin_ids:
+        raise HTTPException(503, f"tech_works:{st['until'] or ''}")
     return {"tg_id": tg_id, "student": student}
 
 
@@ -155,8 +172,11 @@ def api_me(user: dict = Depends(cur)):
             "tomorrow_time": s["tomorrow_time"],
             "misc": bool(s["misc"]),
             "quiet": bool(s["quiet"]),
+            "hw_tomorrow": bool(s["hw_tomorrow"]),
+            "hw_tomorrow_time": s["hw_tomorrow_time"],
             "theme": s["theme"],
         },
+        "exam_week": mnt.exam_week_state(),
         "is_admin": user["tg_id"] in config.cfg.admin_ids,
         "is_staff": user["tg_id"] in config.cfg.staff_ids,
         "semester": semester_info(st["id"]),
@@ -437,6 +457,8 @@ def api_grades(user: dict = Depends(cur)):
         "total": stats["total"],
         "counts": {"h": stats["h"], "b": stats["b"], "o": stats["o"]},
         "disciplines": list(by_disc.values()),
+        "exam_week": mnt.exam_week_state(),
+        "risk_ids": mnt.risk_disciplines(sid),
     }
 
 
@@ -450,6 +472,8 @@ class SettingsBody(BaseModel):
     misc: bool | None = None
     theme: str | None = None
     quiet: bool | None = None
+    hw_tomorrow: bool | None = None
+    hw_tomorrow_time: str | None = None
 
 
 @app.post("/api/settings")
@@ -470,6 +494,10 @@ def api_settings(body: SettingsBody, user: dict = Depends(cur)):
         fields["theme"] = body.theme
     if body.quiet is not None:
         fields["quiet"] = int(body.quiet)
+    if body.hw_tomorrow is not None:
+        fields["hw_tomorrow"] = int(body.hw_tomorrow)
+    if body.hw_tomorrow_time and su.parse_hm(body.hw_tomorrow_time):
+        fields["hw_tomorrow_time"] = body.hw_tomorrow_time
     if fields:
         db.update_settings(sid, **fields)
     s = db.get_settings(sid)
@@ -606,7 +634,7 @@ def api_admin_day_notices(user: dict = Depends(adm)):
     for key, text in db.kv_items("day_notice_"):
         if text:
             out.append({"date": key[len("day_notice_"):], "text": text})
-    out.sort()
+    out.sort(key=lambda x: x["date"])
     return {"items": out}
 
 
@@ -968,6 +996,62 @@ def api_admin_schedule_import(body: ImportBody, user: dict = Depends(adm)):
         return su.import_schedule_json(body.json)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# ------------------------------------------------------------------ админ: режимы и бэкап
+
+class MaintenanceBody(BaseModel):
+    on: bool
+    until: str | None = None  # DD.MM.YYYY HH:MM или пусто
+
+
+@app.post("/api/admin/maintenance")
+def api_admin_maintenance(body: MaintenanceBody, user: dict = Depends(adm)):
+    if body.on:
+        dt = su.parse_dt(body.until) if body.until and body.until.strip() else None
+        mnt.set_maintenance(dt)
+    else:
+        mnt.stop_maintenance()
+    return {"on": body.on}
+
+
+class ExamWeekBody(BaseModel):
+    on: bool
+
+
+@app.post("/api/admin/exam-week")
+def api_admin_exam_week(body: ExamWeekBody, user: dict = Depends(adm)):
+    mnt.set_exam_week(body.on)
+    return {"on": body.on}
+
+
+@app.get("/api/admin/backup")
+def api_admin_backup(user: dict = Depends(adm)):
+    if not os.path.exists(config.cfg.db_path):
+        raise HTTPException(404, "База не найдена")
+    db.checkpoint()
+    return FileResponse(config.cfg.db_path, filename="r26-1-backup.db", media_type="application/octet-stream")
+
+
+@app.post("/api/admin/restore")
+async def api_admin_restore(file: UploadFile = File(...), user: dict = Depends(adm)):
+    import sqlite3 as _sq
+    import tempfile
+
+    content = await file.read()
+    if not content.startswith(b"SQLite format 3"):
+        raise HTTPException(400, "Это не файл базы SQLite")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    try:
+        probe = _sq.connect(tmp_path)
+        probe.execute("SELECT 1 FROM students LIMIT 1")
+        probe.close()
+    except Exception:
+        raise HTTPException(400, "Файл повреждён или не является базой бота")
+    db.swap_database(tmp_path)
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ админ: загрузка файлов и рассылка

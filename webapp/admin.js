@@ -49,6 +49,20 @@
         <div class="drow"><div class="k">📖 Учебники</div><div class="v"><b>${st.textbooks}</b></div></div>
         <div class="drow"><div class="k">📋 Сегодня ответили</div><div class="v"><b>${st.attendance_today.answered}</b> / ${st.attendance_today.total}</div></div>
       </div>
+      <div class="card"><div class="card-title">Режимы</div>
+        <div class="btn-row">
+          <button class="btn" id="mnt-btn" style="margin:0">🛠 Тех. работы: вкл</button>
+          <button class="btn" id="exam-btn" style="margin:0">⚠️ Контрольная: вкл</button>
+        </div>
+        <div class="stat-label" style="margin:8px 0">Тех. работы: у студентов бот и приложение закрыты на время работ (вам — всё доступно). Контрольная: плашка и риски неаттестации в оценках.</div>
+      </div>
+      <div class="card"><div class="card-title">База данных</div>
+        <div class="btn-row">
+          <button class="btn" id="bk-dl" style="margin:0">💾 Скачать бэкап</button>
+          <button class="btn danger" id="bk-up" style="margin:0">📥 Загрузить базу</button>
+        </div>
+        <input type="file" id="bk-file" accept=".db" style="display:none">
+      </div>
       <div class="card"><div class="card-title">Опрос посещаемости</div>
         <div class="muted" style="font-size:12.5px;margin-bottom:8px">Придёт всем авторизованным, даже отметившимся</div>
         <div class="btn-row">
@@ -60,6 +74,74 @@
         <div class="muted" style="font-size:12.5px;margin-bottom:8px">Последняя синхронизация: ${esc(sync)}</div>
         <button class="btn primary" id="sync-btn">🔄 Синхронизировать оценки</button>
       </div>`;
+    // режимы
+    const mntBtn = $("#mnt-btn", body);
+    mntBtn.addEventListener("click", async () => {
+      try {
+        const st = await api("/maintenance");
+        if (st.on) {
+          if (!(await confirmSheet("Выключить тех. работы?"))) return;
+          await api("/admin/maintenance", { method: "POST", body: { on: false } });
+          toast("Тех. работы выключены");
+          mntBtn.textContent = "🛠 Тех. работы: выкл";
+          return;
+        }
+        const until = prompt("До какого момента вести работы?\nФормат 25.10.2026 18:00 — или оставь пустым (бессрочно):", "");
+        if (until === null) return;
+        await api("/admin/maintenance", { method: "POST", body: { on: true, until: until.trim() || null } });
+        toast("Тех. работы включены");
+        mntBtn.textContent = "🛠 Тех. работы: вкл";
+      } catch (e) { toast(e.message, true); }
+    });
+    const examBtn = $("#exam-btn", body);
+    examBtn.addEventListener("click", async () => {
+      try {
+        const me = await api("/me");
+        const on = !me.exam_week;
+        await api("/admin/exam-week", { method: "POST", body: { on } });
+        toast(on ? "Контрольная неделя включена" : "Контрольная неделя выключена");
+        examBtn.textContent = on ? "⚠️ Контрольная: вкл" : "⚠️ Контрольная: выкл";
+      } catch (e) { toast(e.message, true); }
+    });
+    // база
+    $("#bk-dl", body).addEventListener("click", async () => {
+      try {
+        const r = await fetch("/api/admin/backup", { headers: { Authorization: "Bearer " + A.state.token } });
+        if (!r.ok) throw new Error("Ошибка " + r.status);
+        const blob = await r.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "r26-1-backup.db";
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast("Бэкап скачан");
+      } catch (e) { toast(e.message, true); }
+    });
+    $("#bk-up", body).addEventListener("click", () => $("#bk-file", body).click());
+    $("#bk-file", body).addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      if (!(await confirmSheet("Заменить базу файлом " + f.name + "? Все данные станут как в файле!"))) return;
+      const fd = new FormData();
+      fd.append("file", f);
+      try {
+        const r = await fetch("/api/admin/restore", { method: "POST", headers: { Authorization: "Bearer " + A.state.token }, body: fd });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || "Ошибка");
+        toast("База заменена");
+      } catch (err) { toast(err.message, true); }
+    });
+    // начальные подписи кнопок
+    (async () => {
+      try {
+        const st = await api("/maintenance");
+        mntBtn.textContent = st.on ? "🛠 Тех. работы: вкл" : "🛠 Тех. работы: выкл";
+        const me = await api("/me");
+        examBtn.textContent = me.exam_week ? "⚠️ Контрольная: вкл" : "⚠️ Контрольная: выкл";
+      } catch (e) {}
+    })();
+
     const askBtn = async (mode, pair_no) => {
       try { const r = await api("/admin/attendance/ask", { method: "POST", body: { mode, pair_no } }); toast(`Разослано: ${r.sent}`); }
       catch (e) { toast(e.message, true); }

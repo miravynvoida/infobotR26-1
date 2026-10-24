@@ -253,6 +253,13 @@ def cab_kb(s: dict) -> KB:
                     callback_data="cab:q:tgl",
                 )
             ],
+            [
+                BTN(
+                    text=f"📚 ДЗ на завтра: {'ВКЛ' if s.get('hw_tomorrow') else 'выкл'}",
+                    callback_data="cab:hw:tgl",
+                ),
+                BTN(text=f"🕐 {s.get('hw_tomorrow_time') or '18:00'}", callback_data="cab:hw:menu"),
+            ],
             [BTN(text="🏠 Главное меню", callback_data="home")],
         ]
     )
@@ -261,6 +268,13 @@ def cab_kb(s: dict) -> KB:
 def minutes_kb() -> KB:
     vals = [5, 10, 15, 30, 45, 60, 90]
     rows = _grid([(f"{v} мин", f"cab:np:{v}") for v in vals], 4)
+    rows.append([BTN(text="◀ Назад", callback_data="cab")])
+    return KB(inline_keyboard=rows)
+
+
+def hw_times_kb() -> KB:
+    vals = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00"]
+    rows = _grid([(v, f"cab:hw:{v}") for v in vals], 3)
     rows.append([BTN(text="◀ Назад", callback_data="cab")])
     return KB(inline_keyboard=rows)
 
