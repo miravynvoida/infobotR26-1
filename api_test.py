@@ -56,7 +56,7 @@ async def main():
         check("/api/me", r.status_code == 200 and r.json()["fio"].startswith("Аносов"), r.text[:200])
         check("me.group Р 26-1", r.json()["group"] == "Р 26-1")
         check("me.settings default 30/19:00", r.json()["settings"]["next_pair_min"] == 30 and r.json()["settings"]["tomorrow_time"] == "19:00")
-        check("me.streak есть", isinstance(r.json().get("streak"), int))
+        check("me.semester есть", isinstance(r.json().get("semester"), dict) and "week" in r.json()["semester"], r.text[:150])
         check("settings.quiet есть", isinstance(r.json()["settings"].get("quiet"), bool))
 
         r = await c.get("/api/today", headers=h)
@@ -127,6 +127,19 @@ async def main():
 
         r = await c.get("/api/attendance/week-summary", headers=h)
         check("week-summary для стаффа", r.status_code == 200 and "days" in r.json(), r.text[:120])
+        r = await c.get("/api/rating", headers=h)
+        rt = r.json()
+        check("/api/rating avg", r.status_code == 200 and rt["items"][0]["pos"] == 1 and "short" in rt["items"][0], r.text[:150])
+        r = await c.get("/api/rating?sort=skips", headers=h)
+        check("/api/rating skips", r.status_code == 200)
+        r = await c.get("/api/rating?sort=late", headers=h)
+        check("/api/rating late", r.status_code == 200)
+        r = await c.get("/api/admin/day-notices", headers=h)
+        check("day-notices список", r.status_code == 200 and any(x["date"] == "2026-11-03" for x in r.json()["items"]), r.text[:150])
+        r = await c.delete("/api/admin/day-notice/2026-11-03", headers=h)
+        check("day-notice удаление", r.status_code == 200)
+        r = await c.get("/api/schedule/day/2026-11-03", headers=h)
+        check("day-notice снят", r.json().get("day_notice") == "", r.text[:150])
         r = await c.get("/api/me")
         check("без токена — 401", r.status_code == 401)
 

@@ -622,3 +622,11 @@ def kv_get(key: str, default: str = "") -> str:
 
 def kv_set(key: str, value: str) -> None:
     ex("INSERT INTO kv(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+
+def kv_items(prefix: str) -> list[tuple[str, str]]:
+    return [(r["key"], r["value"]) for r in q("SELECT key, value FROM kv WHERE key LIKE ?", (prefix + "%",))]
+
+
+def kv_delete(key: str) -> None:
+    ex("DELETE FROM kv WHERE key=?", (key,))

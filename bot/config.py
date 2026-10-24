@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 # Отметка сборки: показывается в /id и в логах при старте —
 # чтобы всегда было видно, какая версия кода реально запущена.
-BUILD_TAG = "build-6 (v3)"
+BUILD_TAG = "build-7 (v4)"
 
 load_dotenv()
 

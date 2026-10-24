@@ -146,7 +146,6 @@ def api_me(user: dict = Depends(cur)):
         "fio": st["fio"],
         "short": su.short_name(st["fio"]),
         "group": config.cfg.group_name,
-        "streak": att_svc.streak(st["id"]),
         "specialty": config.cfg.specialty,
         "stats": {"avg": stats["avg"], "total": stats["total"], "h": stats["h"], "b": stats["b"], "o": stats["o"]},
         "settings": {
@@ -160,6 +159,34 @@ def api_me(user: dict = Depends(cur)):
         },
         "is_admin": user["tg_id"] in config.cfg.admin_ids,
         "is_staff": user["tg_id"] in config.cfg.staff_ids,
+        "semester": semester_info(st["id"]),
+    }
+
+
+def semester_info(sid: int) -> dict:
+    TOTAL = 18
+    week = su.study_week(su.today()) or 1
+    # «идеальная неделя»: по прошедшим учебным дням этой недели нет пропусков
+    monday = su.today() - timedelta(days=su.today().weekday())
+    perfect = True
+    had_days = False
+    for i in range((su.today() - monday).days + 1):
+        d = monday + timedelta(days=i)
+        if not db.day_lessons(su.iso(d)):
+            continue
+        had_days = True
+        r = db.get_attendance(su.iso(d), sid)
+        if r is None or r["status"] == "none":
+            continue  # без ответа не считаем провалом
+        if r["status"] == "none":
+            perfect = False
+        if r["status"] == "partial" and json.loads(r["missing_pairs"] or "[]"):
+            perfect = False
+    return {
+        "week": week,
+        "total": TOTAL,
+        "pct": min(100, round(week / TOTAL * 100)),
+        "perfect_week": perfect and had_days,
     }
 
 
@@ -329,6 +356,36 @@ async def api_homework_send(hid: int, user: dict = Depends(cur)):
     return {"sent": sent, "total": len(files)}
 
 
+# ------------------------------------------------------------------ рейтинг
+
+@app.get("/api/rating")
+def api_rating(sort: str = "avg", user: dict = Depends(cur)):
+    rows = []
+    for st in db.all_students():
+        stats = db.student_stats(st["id"])
+        if stats["total"] == 0 and stats["h"] == 0 and stats["b"] == 0 and stats["o"] == 0:
+            continue
+        rows.append(
+            {
+                "fio": st["fio"],
+                "short": su.short_name(st["fio"]),
+                "avg": stats["avg"],
+                "h": stats["h"],
+                "b": stats["b"],
+                "o": stats["o"],
+            }
+        )
+    if sort == "skips":
+        rows.sort(key=lambda r: (r["h"], -r["avg"]))
+    elif sort == "late":
+        rows.sort(key=lambda r: (r["o"], -r["avg"]))
+    else:
+        rows.sort(key=lambda r: (-(r["avg"] or 0)))
+    for i, r in enumerate(rows, 1):
+        r["pos"] = i
+    return {"sort": sort, "items": rows}
+
+
 # ------------------------------------------------------------------ учебники
 
 @app.get("/api/textbooks")
@@ -375,31 +432,11 @@ def api_grades(user: dict = Depends(cur)):
     for disc in by_disc.values():
         nums = [int(g["value"]) for g in disc["grades"] if g["value"] in ("2", "3", "4", "5")]
         disc["avg"] = round(sum(nums) / len(nums), 2) if nums else None
-    months: dict[str, list[int]] = {}
-    for disc in by_disc.values():
-        for gr in disc["grades"]:
-            if gr["value"] in ("2", "3", "4", "5") and gr["date"]:
-                months.setdefault(gr["date"][:7], []).append(int(gr["value"]))
-    MONTHS_RU = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
-    trend = []
-    for m in sorted(months):
-        vals = months[m]
-        trend.append({
-            "label": MONTHS_RU[int(m[5:7]) - 1],
-            "avg": round(sum(vals) / len(vals), 2),
-            "n": len(vals),
-        })
-    all_marks = [int(r["value"]) for r in db.q(
-        "SELECT value FROM grades WHERE value IN ('2','3','4','5')"
-    )]
-    group_avg = round(sum(all_marks) / len(all_marks), 2) if all_marks else None
     return {
         "avg": stats["avg"],
         "total": stats["total"],
         "counts": {"h": stats["h"], "b": stats["b"], "o": stats["o"]},
         "disciplines": list(by_disc.values()),
-        "trend": trend,
-        "group_avg": group_avg,
     }
 
 
@@ -501,6 +538,22 @@ def api_admin_day_notice(body: DayNoticeBody, user: dict = Depends(adm)):
     except ValueError:
         raise HTTPException(400, "Неверная дата")
     db.kv_set(f"day_notice_{body.date}", body.text.strip())
+    return {"ok": True}
+
+
+@app.get("/api/admin/day-notices")
+def api_admin_day_notices(user: dict = Depends(adm)):
+    out = []
+    for key, text in db.kv_items("day_notice_"):
+        if text:
+            out.append({"date": key[len("day_notice_"):], "text": text})
+    out.sort()
+    return {"items": out}
+
+
+@app.delete("/api/admin/day-notice/{day_iso}")
+def api_admin_day_notice_delete(day_iso: str, user: dict = Depends(adm)):
+    db.kv_delete(f"day_notice_{day_iso}")
     return {"ok": True}
 
 

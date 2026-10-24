@@ -330,8 +330,14 @@
         <div class="dl-sub">${esc(soonDl.discipline.name)} · сдать ${dlTxt}</div></div>
         <div class="dl-days ${days <= 1 ? "hot" : ""}">${days}<i>дн</i></div></div>`;
     }
-    const streakN = state.me.streak || 0;
-    const streakCard = streakN > 0 ? `<div class="card streak-card"><span class="flame">🔥</span><div><b>${streakN} ${streakN === 1 ? "день" : streakN < 5 ? "дня" : "дней"} без пропусков</b><div class="stat-label">серия — не прогуливай, чтобы не потерять</div></div></div>` : "";
+    const sem = state.me.semester || {};
+    let semCard = "";
+    if (sem && sem.total) {
+      semCard = `<div class="card sem-card">
+        <div class="timer-top"><span>Учебная неделя ${sem.week} из ${sem.total}${sem.perfect_week ? " · ✓ идеальная неделя" : ""}</span><b>${sem.pct}%</b></div>
+        <div class="timer-bar"><div style="width:${sem.pct}%"></div></div>
+      </div>`;
+    }
 
     let html = `
       <div class="section-head"><div>
@@ -340,7 +346,7 @@
       </div></div>
       ${profileCard(state.me)}
       ${dlCard}
-      ${streakCard}
+      ${semCard}
       <div class="tiles tiles-2">
         <div class="tile wide" data-act="hw"><div class="tile-ico">${I.task}</div><div class="tile-body"><div class="tile-name">Домашнее задание</div><div class="tile-sub">${newHw === 1 ? "1 новое" : newHw ? newHw + " новых" : "всё просмотрено"}</div></div>${newHw ? `<div class="dot">${newHw}</div>` : ""}</div>
         <div class="tile wide" data-act="tb"><div class="tile-ico">${I.book}</div><div class="tile-body"><div class="tile-name">Учебники</div><div class="tile-sub">материалы дисциплин</div></div></div>
@@ -631,8 +637,12 @@
     v.innerHTML = `
       <div class="section-head"><div>
         <div class="section-title">Оценки</div>
-        <div class="section-sub">Средний балл и отметки по дисциплинам</div>
       </div></div>
+      <div class="seg" id="grades-seg" style="margin-bottom:12px">
+        <button data-g="mine" class="on">Мои оценки</button>
+        <button data-g="rating">Рейтинг группы</button>
+      </div>
+      <div id="grades-mine">
       <div class="stat-grid">
         <div class="stat-card"><div class="donut-wrap">
           <div class="donut"><svg width="84" height="84">
@@ -640,14 +650,12 @@
             <circle cx="42" cy="42" r="36" stroke="var(--accent)" stroke-width="6" fill="none"
               stroke-linecap="round" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}"/>
           </svg><div class="donut-center"><b>${fmtAvg(g.avg)}</b><span>из 5</span></div></div>
-          <div><div class="stat-num" style="font-size:19px">${g.total}</div><div class="stat-label">оценок всего</div>${g.group_avg != null ? `<div class="stat-label" style="margin-top:4px;color:var(--accent-2)">группа: ${fmtAvg(g.group_avg)}</div>` : ""}</div>
+          <div><div class="stat-num" style="font-size:19px">${g.total}</div><div class="stat-label">оценок всего</div></div>
         </div>
-        ${g.trend && g.trend.length >= 2 ? sparkline(g.trend) : ""}
-        </div>
-        <div class="stat-card hbo">
-          <div class="drow"><div class="k" style="width:auto;font-weight:800">Н</div><div class="v" style="text-align:right"><b>${g.counts.h}</b></div></div>
-          <div class="drow"><div class="k" style="width:auto;font-weight:800">Б</div><div class="v" style="text-align:right"><b>${g.counts.b}</b></div></div>
-          <div class="drow"><div class="k" style="width:auto;font-weight:800">О</div><div class="v" style="text-align:right"><b>${g.counts.o}</b></div></div>
+        <div class="stat-card hbo-table">
+          <div class="hbo-row"><span>Н</span><b>${g.counts.h}</b></div>
+          <div class="hbo-row"><span>Б</span><b>${g.counts.b}</b></div>
+          <div class="hbo-row"><span>О</span><b>${g.counts.o}</b></div>
         </div>
       </div>
       <div class="card"><div class="card-title">Все дисциплины</div>
@@ -661,9 +669,48 @@
             </div>
             <div class="disc-grades">${d.grades.length ? d.grades.map((x) => gradePill(x)).join("") : '<span class="muted" style="font-size:12.5px">Оценок пока нет</span>'}</div>
           </div>`).join("")}
-      </div>`;
+      </div>
+      </div>
+      <div id="grades-rating" style="display:none"></div>`;
     v.querySelectorAll(".disc-head").forEach((h) => h.addEventListener("click", () => {
       h.parentElement.classList.toggle("open"); haptic("light");
+    }));
+    v.querySelectorAll("#grades-seg button").forEach((b) => b.addEventListener("click", async () => {
+      v.querySelectorAll("#grades-seg button").forEach((x) => x.classList.toggle("on", x === b));
+      const mine = $("#grades-mine", v), rating = $("#grades-rating", v);
+      if (b.dataset.g === "mine") { mine.style.display = ""; rating.style.display = "none"; return; }
+      mine.style.display = "none"; rating.style.display = "";
+      await renderRating(rating);
+    }));
+  }
+
+  async function renderRating(box) {
+    box.innerHTML = '<div class="card">' + skeleton(4) + "</div>";
+    let sort = box.dataset.sort || "avg";
+    let r;
+    try { r = await api("/api/rating?sort=" + sort); } catch (e) { box.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+    const sorts = [
+      { k: "avg", label: "По успеваемости" },
+      { k: "skips", label: "По пропускам (Н)" },
+      { k: "late", label: "По опозданиям (О)" },
+    ];
+    const medals = ["🥇", "🥈", "🥉"];
+    const val = (it) => sort === "avg" ? fmtAvg(it.avg) : sort === "skips" ? it.h : it.o;
+    box.innerHTML = `
+      <div class="chips" style="margin-bottom:10px">
+        ${sorts.map((x) => `<div class="chip ${x.k === sort ? "on" : ""}" data-sort="${x.k}" style="padding:9px 10px">${x.label}</div>`).join("")}
+      </div>
+      <div class="card rating-list">
+        ${r.items.map((it, i) => `
+          <div class="rate-row ${it.pos <= 3 && sort === "avg" ? "top" : ""}">
+            <span class="rate-pos">${sort === "avg" && it.pos <= 3 ? medals[it.pos - 1] : it.pos}</span>
+            ${discChip(it.short)}
+            <span class="rate-name">${esc(it.short)}</span>
+            <b class="rate-val">${val(it)}</b>
+          </div>`).join("") || '<div class="empty">Пока нет данных — синхронизируйте оценки</div>'}
+      </div>`;
+    box.querySelectorAll("[data-sort]").forEach((c) => c.addEventListener("click", () => {
+      box.dataset.sort = c.dataset.sort; haptic("light"); renderRating(box);
     }));
   }
 
@@ -733,11 +780,13 @@
           ${[["stats", "Статистика"], ["hw", "ДЗ"], ["schedule", "Расписание"], ["students", "Студенты"], ["disc", "Дисциплины"], ["tb", "Учебники"], ["bc", "Рассылка"]].map((x) =>
             `<div class="tile" data-adm="${x[0]}"><div class="tile-name">${x[1]}</div></div>`).join("")}
         </div>
-      </div>` : (me.is_staff ? `
+      </div>` : ""}
+      ${me.is_staff ? `
       <div class="card"><div class="card-title">Сводка посещаемости</div>
         <button class="btn" id="staff-sum-btn">Показать сводку за сегодня</button>
+        <button class="btn" id="staff-week-btn">Сводка за учебную неделю</button>
         <div id="staff-sum-body" class="mt8"></div>
-      </div>` : "")}`;
+      </div>` : ""}`;
 
     $("#profile-card").addEventListener("click", () => {});
     const setSave = (body) => api("/settings", { method: "POST", body }).catch((e) => toast(e.message, true));

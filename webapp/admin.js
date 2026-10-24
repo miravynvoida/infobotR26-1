@@ -272,6 +272,11 @@
       </div>
       <div class="card"><div class="card-title">📅 Редактор по дням</div>
         <button class="btn" id="day-edit-btn" style="margin:0">Выбрать день</button>
+      </div>
+      <div class="card"><div class="card-title">⚠️ Метки дней (отмена/замена)
+        <button class="mini-btn" id="dn-refresh" style="margin-left:auto">Обновить</button></div>
+        <div id="dn-list"></div>
+        <button class="btn" id="dn-add" style="margin-top:8px">Поставить метку (без рассылки)</button>
       </div>`;
     $("#imp-btn", body).addEventListener("click", async () => {
       const text = $("#imp-json", body).value.trim();
@@ -288,6 +293,38 @@
     $("#day-edit-btn", body).addEventListener("click", () => {
       sheetCalendar(todayISO(), null, (iso) => renderDayEditor(body, iso));
     });
+
+    const loadNotices = async () => {
+      const box = $("#dn-list", body);
+      if (!box) return;
+      try {
+        const r = await api("/admin/day-notices");
+        box.innerHTML = (r.items || []).length
+          ? r.items.map((n) => `
+            <div class="a-row">
+              <div class="grow"><div class="a-name">${fmtDate(n.date)}</div><div class="a-sub">${esc(n.text)}</div></div>
+              <button class="mini-btn danger" data-dn="${n.date}">Снять</button>
+            </div>`).join("")
+          : '<div class="muted" style="font-size:12.5px;margin:4px 0">Активных меток нет</div>';
+        box.querySelectorAll("[data-dn]").forEach((b) => b.addEventListener("click", async () => {
+          try { await api(`/admin/day-notice/${b.dataset.dn}`, { method: "DELETE" }); toast("Метка снята"); loadNotices(); }
+          catch (e) { toast(e.message, true); }
+        }));
+      } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    };
+    $("#dn-refresh", body).addEventListener("click", loadNotices);
+    $("#dn-add", body).addEventListener("click", () => {
+      sheetCalendar(todayISO(), null, async (iso) => {
+        const text = prompt("Текст метки (например: 3-ю пару отменили):");
+        if (!text || !text.trim()) return;
+        try {
+          await api("/admin/day-notice", { method: "POST", body: { date: iso, text: text.trim() } });
+          toast("Метка поставлена: " + fmtDate(iso));
+          loadNotices();
+        } catch (e) { toast(e.message, true); }
+      });
+    });
+    loadNotices();
   }
 
   async function renderDayEditor(body, iso) {

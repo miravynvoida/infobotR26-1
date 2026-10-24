@@ -446,3 +446,19 @@ textarea.input { min-height: 84px; resize: vertical; }
 .spark { width: 100%; height: 38px; }
 .file-chip.tpl { cursor: pointer; border-color: var(--accent-soft); color: var(--accent-2); }
 img.emoji { height: 1em; width: 1em; margin: 0 .05em 0 .1em; vertical-align: -0.1em; }
+
+/* ===== v4: таблица Н/Б/О, рейтинг, прогресс семестра ===== */
+.hbo-table { padding: 6px 16px; }
+.hbo-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.hbo-row:last-child { border-bottom: none; }
+.hbo-row span { font-weight: 800; }
+.hbo-row b { font-size: 17px; }
+.rating-list { padding: 6px 12px; }
+.rate-row { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+.rate-row:last-child { border-bottom: none; }
+.rate-pos { flex: none; width: 34px; text-align: center; font-weight: 800; color: var(--muted); }
+.rate-row.top .rate-pos { font-size: 18px; }
+.rate-row.top { background: linear-gradient(90deg, var(--accent-soft), transparent); border-radius: 12px; }
+.rate-name { flex: 1; font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rate-val { font-size: 15px; }
+.sem-card { padding: 13px 16px; }
