@@ -201,6 +201,10 @@ def init() -> None:
     connect()
     with _lock:
         _conn.executescript(SCHEMA)
+        # мягкая миграция: колонки, добавленные после первого релиза
+        cols = {r["name"] for r in q("PRAGMA table_info(notify_settings)")}
+        if "quiet" not in cols:
+            _conn.execute("ALTER TABLE notify_settings ADD COLUMN quiet INTEGER NOT NULL DEFAULT 0")
         _conn.commit()
     if not q("SELECT 1 FROM students LIMIT 1"):
         codes: list[tuple[str, str]] = []

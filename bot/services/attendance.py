@@ -22,6 +22,41 @@ def ask_active(n: datetime | None = None) -> dict | None:
     return None
 
 
+def streak(sid: int) -> int:
+    """Сколько подряд учебных дней подряд без пропусков (частичные без пропусков тоже зачёт)."""
+    days = [d for d in db.schedule_dates() if d <= su.iso(su.today())]
+    n = 0
+    for day in reversed(days):
+        r = db.get_attendance(day, sid)
+        if r is None:
+            break  # день не отмечен (прошлые семестры) — серия прерывается
+        if r["status"] == "none":
+            break
+        if r["status"] == "partial":
+            missing = json.loads(r["missing_pairs"] or "[]")
+            if missing:
+                break
+        n += 1
+    return n
+
+
+def week_summary() -> list[dict]:
+    """Сводка за текущую учебную неделю (пн–вс) для старосты/замов."""
+    today = su.today()
+    monday = today - timedelta(days=today.weekday())
+    out = []
+    for i in range(7):
+        d = monday + timedelta(days=i)
+        day_iso = su.iso(d)
+        if not db.day_lessons(day_iso):
+            continue
+        s = summary(day_iso)
+        s["date"] = day_iso
+        s["is_future"] = d > today
+        out.append(s)
+    return out
+
+
 def summary(day_iso: str) -> dict:
     rows = {r["student_id"]: r for r in db.day_attendance(day_iso)}
     auth = db.authorized_students()

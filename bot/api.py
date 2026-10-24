@@ -146,6 +146,7 @@ def api_me(user: dict = Depends(cur)):
         "fio": st["fio"],
         "short": su.short_name(st["fio"]),
         "group": config.cfg.group_name,
+        "streak": att_svc.streak(st["id"]),
         "specialty": config.cfg.specialty,
         "stats": {"avg": stats["avg"], "total": stats["total"], "h": stats["h"], "b": stats["b"], "o": stats["o"]},
         "settings": {
@@ -154,6 +155,7 @@ def api_me(user: dict = Depends(cur)):
             "tomorrow": bool(s["tomorrow"]),
             "tomorrow_time": s["tomorrow_time"],
             "misc": bool(s["misc"]),
+            "quiet": bool(s["quiet"]),
             "theme": s["theme"],
         },
         "is_admin": user["tg_id"] in config.cfg.admin_ids,
@@ -171,6 +173,7 @@ def api_today(user: dict = Depends(cur)):
         "weekday": su.WEEKDAYS_FULL[n.weekday()],
         "week_number": su.study_week(n.date()),
         "status_text": su.main_status_html(n),
+        "day_notice": day_notice(day),
         "lessons": [lesson_dict(ls, n, True) for ls in lessons],
     }
 
@@ -213,6 +216,7 @@ def api_schedule_day(day_iso: str, user: dict = Depends(cur)):
     return {
         "date": day_iso,
         "weekday": su.WEEKDAYS_FULL[d.weekday()],
+        "day_notice": day_notice(day_iso),
         "lessons": [lesson_dict(ls, n, today) for ls in lessons],
     }
 
@@ -266,6 +270,7 @@ def hw_dict(h: dict, unviewed: set[int], done: set[int]) -> dict:
         "id": h["id"],
         "discipline": {"id": h["discipline_id"], "name": h["discipline"], "emoji": h["emoji"]},
         "title": h["title"],
+        "task": h["task_text"],
         "due_date": h["due_date"],
         "due_type": h.get("due_type"),
         "published_at": h.get("published_at"),
@@ -370,11 +375,31 @@ def api_grades(user: dict = Depends(cur)):
     for disc in by_disc.values():
         nums = [int(g["value"]) for g in disc["grades"] if g["value"] in ("2", "3", "4", "5")]
         disc["avg"] = round(sum(nums) / len(nums), 2) if nums else None
+    months: dict[str, list[int]] = {}
+    for disc in by_disc.values():
+        for gr in disc["grades"]:
+            if gr["value"] in ("2", "3", "4", "5") and gr["date"]:
+                months.setdefault(gr["date"][:7], []).append(int(gr["value"]))
+    MONTHS_RU = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+    trend = []
+    for m in sorted(months):
+        vals = months[m]
+        trend.append({
+            "label": MONTHS_RU[int(m[5:7]) - 1],
+            "avg": round(sum(vals) / len(vals), 2),
+            "n": len(vals),
+        })
+    all_marks = [int(r["value"]) for r in db.q(
+        "SELECT value FROM grades WHERE value IN ('2','3','4','5')"
+    )]
+    group_avg = round(sum(all_marks) / len(all_marks), 2) if all_marks else None
     return {
         "avg": stats["avg"],
         "total": stats["total"],
         "counts": {"h": stats["h"], "b": stats["b"], "o": stats["o"]},
         "disciplines": list(by_disc.values()),
+        "trend": trend,
+        "group_avg": group_avg,
     }
 
 
@@ -387,6 +412,7 @@ class SettingsBody(BaseModel):
     tomorrow_time: str | None = None
     misc: bool | None = None
     theme: str | None = None
+    quiet: bool | None = None
 
 
 @app.post("/api/settings")
@@ -405,6 +431,8 @@ def api_settings(body: SettingsBody, user: dict = Depends(cur)):
         fields["misc"] = int(body.misc)
     if body.theme in ("dark", "light"):
         fields["theme"] = body.theme
+    if body.quiet is not None:
+        fields["quiet"] = int(body.quiet)
     if fields:
         db.update_settings(sid, **fields)
     s = db.get_settings(sid)
@@ -454,6 +482,30 @@ def api_attendance(body: AttBody, user: dict = Depends(cur)):
 @app.get("/api/attendance/summary")
 def api_attendance_summary(user: dict = Depends(staff)):
     return att_svc.summary(su.iso(su.today()))
+
+
+@app.get("/api/attendance/week-summary")
+def api_attendance_week_summary(user: dict = Depends(staff)):
+    return {"days": att_svc.week_summary()}
+
+
+class DayNoticeBody(BaseModel):
+    date: str
+    text: str  # "" — убрать метку
+
+
+@app.post("/api/admin/day-notice")
+def api_admin_day_notice(body: DayNoticeBody, user: dict = Depends(adm)):
+    try:
+        date.fromisoformat(body.date)
+    except ValueError:
+        raise HTTPException(400, "Неверная дата")
+    db.kv_set(f"day_notice_{body.date}", body.text.strip())
+    return {"ok": True}
+
+
+def day_notice(day_iso: str) -> str:
+    return db.kv_get(f"day_notice_{day_iso}", "")
 
 
 # ------------------------------------------------------------------ админ: статистика

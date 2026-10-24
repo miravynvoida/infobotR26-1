@@ -168,8 +168,12 @@ async def tb_new_finish(cb: CallbackQuery, state: FSMContext):
     tid = db.create_textbook(data["disc_id"], data.get("title") or "—", data.get("desc"), data.get("files") or [])
     await state.clear()
     t = db.textbook_by_id(tid)
-    await cb.answer()
-    await cb.message.edit_text("✅ Учебник добавлен.\n\n" + tb_html(t), reply_markup=tb_item_kb(t))
+    await cb.answer("Учебник добавлен")
+    # сообщение с кнопкой могли только что удалить — правим, а если не выйдет, шлём новое
+    try:
+        await cb.message.edit_text("✅ Учебник добавлен.\n\n" + tb_html(t), reply_markup=tb_item_kb(t))
+    except TelegramBadRequest:
+        await cb.message.answer("✅ Учебник добавлен.\n\n" + tb_html(t), reply_markup=tb_item_kb(t))
 
 
 # ------------------------------------------------------------------ редактировать
@@ -246,10 +250,16 @@ async def tb_files_add(cb: CallbackQuery, state: FSMContext):
     tid = int(cb.data.split(":")[2])
     await state.set_state(TbEdSG.files)
     await cb.answer()
-    msg = await cb.message.edit_text(
-        "➕ Прикрепите файлы сообщениями, затем «✅ Готово»:", reply_markup=files_wait_kb("atbfw")
-    )
-    await state.update_data(fmsg=msg.message_id if hasattr(msg, "message_id") else None)
+    try:
+        msg = await cb.message.edit_text(
+            "➕ Прикрепите файлы сообщениями, затем «✅ Готово»:", reply_markup=files_wait_kb(f"atbfw:{tid}")
+        )
+        await state.update_data(fmsg=msg.message_id if hasattr(msg, "message_id") else None)
+    except TelegramBadRequest:
+        msg = await cb.message.answer(
+            "➕ Прикрепите файлы сообщениями, затем «✅ Готово»:", reply_markup=files_wait_kb(f"atbfw:{tid}")
+        )
+        await state.update_data(fmsg=msg.message_id)
 
 
 @router.message(TbEdSG.files, F.document | F.photo | F.video | F.audio | F.animation | F.voice | F.video_note)
@@ -267,7 +277,7 @@ async def tb_files_attach(m: Message, state: FSMContext):
             pass
     msg = await m.answer(
         f"📎 Файл «{su.esc(desc['name'])}» добавлен. Всего: <b>{len(files)}</b>.",
-        reply_markup=files_wait_kb("atbfw"),
+        reply_markup=files_wait_kb(f"atbfw:{data['tid']}"),
     )
     await state.update_data(files=files, fmsg=msg.message_id)
 
@@ -288,7 +298,10 @@ async def tb_files_apply(cb: CallbackQuery, state: FSMContext):
     t = db.textbook_by_id(tid)
     await state.clear()
     await cb.answer("Файлы обновлены")
-    await cb.message.edit_text(tb_html(t), reply_markup=tb_item_kb(t))
+    try:
+        await cb.message.edit_text(tb_html(t), reply_markup=tb_item_kb(t))
+    except TelegramBadRequest:
+        await cb.message.answer(tb_html(t), reply_markup=tb_item_kb(t))
 
 
 # ------------------------------------------------------------------ удалить

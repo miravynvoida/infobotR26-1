@@ -273,6 +273,34 @@
     </div>`;
   }
 
+  let __timerInt = null;
+  function startPairTimer(lessons) {
+    if (__timerInt) { clearInterval(__timerInt); __timerInt = null; }
+    const draw = () => {
+      const el = $("#pair-timer");
+      if (!el) { if (__timerInt) clearInterval(__timerInt); __timerInt = null; return; }
+      const now = new Date();
+      const minsNow = now.getHours() * 60 + now.getMinutes();
+      const cur = (lessons || []).find((l) => {
+        const [sh, sm] = l.start.split(":").map(Number);
+        const [eh, em] = l.end.split(":").map(Number);
+        return minsNow >= sh * 60 + sm && minsNow < eh * 60 + em;
+      });
+      if (!cur) { el.innerHTML = ""; return; }
+      const [sh, sm] = cur.start.split(":").map(Number);
+      const [eh, em] = cur.end.split(":").map(Number);
+      const total = (eh * 60 + em) - (sh * 60 + sm);
+      const passed = minsNow - (sh * 60 + sm);
+      const left = total - passed;
+      el.innerHTML = `<div class="timer-card">
+        <div class="timer-top"><span>${esc(cur.discipline)} · идёт пара</span><b>до конца ${Math.floor(left / 60) ? Math.floor(left / 60) + " ч " : ""}${left % 60} мин</b></div>
+        <div class="timer-bar"><div style="width:${Math.min(100, Math.round((passed / total) * 100))}%"></div></div>
+      </div>`;
+    };
+    draw();
+    __timerInt = setInterval(draw, 30000);
+  }
+
   /* ---------- Главная ---------- */
   async function viewMain(v) {
     v.innerHTML = skeleton(5);
@@ -289,6 +317,21 @@
     const hello = hour < 5 ? "Доброй ночи" : hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
     const firstName = (state.me.fio || "").trim().split(" ")[1] || (state.me.fio || "").trim();
     const newHw = hw.total_new || 0;
+    const soonDl = hw.groups
+      .flatMap((g) => g.items)
+      .filter((h) => h.due_date && h.due_date >= todayISO() && !h.done)
+      .sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
+    let dlCard = "";
+    if (soonDl) {
+      const days = Math.round((new Date(soonDl.due_date + "T00:00:00") - new Date(todayISO() + "T00:00:00")) / 86400000);
+      const dlTxt = days === 0 ? "сегодня" : days === 1 ? "завтра" : "через " + days + " дн.";
+      dlCard = `<div class="card dl-card"><div class="dl-left"><div class="dl-t">Ближайшее ДЗ</div>
+        <div class="dl-name">${esc(soonDl.title)}</div>
+        <div class="dl-sub">${esc(soonDl.discipline.name)} · сдать ${dlTxt}</div></div>
+        <div class="dl-days ${days <= 1 ? "hot" : ""}">${days}<i>дн</i></div></div>`;
+    }
+    const streakN = state.me.streak || 0;
+    const streakCard = streakN > 0 ? `<div class="card streak-card"><span class="flame">🔥</span><div><b>${streakN} ${streakN === 1 ? "день" : streakN < 5 ? "дня" : "дней"} без пропусков</b><div class="stat-label">серия — не прогуливай, чтобы не потерять</div></div></div>` : "";
 
     let html = `
       <div class="section-head"><div>
@@ -296,11 +339,14 @@
         <div class="section-sub">${today.weekday}, ${fmtDate(today.date)}${today.week_number ? " · учебная неделя " + today.week_number : ""}</div>
       </div></div>
       ${profileCard(state.me)}
+      ${dlCard}
+      ${streakCard}
       <div class="tiles tiles-2">
-        <div class="tile wide" data-act="hw"><div class="tile-ico">${I.task}</div><div class="tile-body"><div class="tile-name">Домашнее задание</div><div class="tile-sub">${newHw ? newHw + " новых" : "всё просмотрено"}</div></div>${newHw ? `<div class="dot">${newHw}</div>` : ""}</div>
+        <div class="tile wide" data-act="hw"><div class="tile-ico">${I.task}</div><div class="tile-body"><div class="tile-name">Домашнее задание</div><div class="tile-sub">${newHw === 1 ? "1 новое" : newHw ? newHw + " новых" : "всё просмотрено"}</div></div>${newHw ? `<div class="dot">${newHw}</div>` : ""}</div>
         <div class="tile wide" data-act="tb"><div class="tile-ico">${I.book}</div><div class="tile-body"><div class="tile-name">Учебники</div><div class="tile-sub">материалы дисциплин</div></div></div>
       </div>
-      <div class="status-line" id="today-status">${today.status_text}</div>`;
+      <div class="status-line" id="today-status">${today.status_text}</div>
+      <div id="pair-timer"></div>`;
 
     if (att.active && !att.response) {
       html += `<div class="att-card" id="att-card">
@@ -340,6 +386,7 @@
     if (sumBtn) sumBtn.addEventListener("click", async () => {
       try { const s = await api("/attendance/summary"); const card = $("#staff-card-body"); if (card) card.innerHTML = staffSummaryBody(s); toast("Обновлено"); } catch (e) { toast(e.message, true); }
     });
+    startPairTimer(today.lessons);
   }
 
   function staffSummaryBody(s) {
@@ -419,6 +466,19 @@
     } catch (e) { toast(e.message, true); state.sch.days = []; }
   }
 
+  async function selectDateAny(iso) {
+    state.sch.date = iso;
+    state.sch.solo = null;
+    const wk = (state.sch.weeks || []).find((w) => w.start <= iso && iso <= w.end);
+    if (wk && wk.n !== state.sch.week) {
+      state.sch.week = wk.n;
+      await loadWeek();
+    } else if (!wk) {
+      try { state.sch.solo = await api("/schedule/day/" + iso); } catch (e) { toast(e.message, true); }
+    }
+    renderSchedule();
+  }
+
   async function renderSchedule(v) {
     v = v || $("#view");
     const weeks = state.sch.weeks || [];
@@ -436,11 +496,19 @@
         return `<div class="${cls}" data-d="${d.date}">${name}<span class="sub">${+d.date.slice(8)}</span></div>`;
       }).join("") + `</div>`;
     }
-    const selDay = days.find((d) => d.date === state.sch.date);
+    let selDay = days.find((d) => d.date === state.sch.date);
+    let dayNotice = "";
+    if (!selDay && state.sch.solo && state.sch.solo.date === state.sch.date) {
+      selDay = { date: state.sch.solo.date, lessons: state.sch.solo.lessons || [] };
+      dayNotice = state.sch.solo.day_notice || "";
+    }
     const isToday = state.sch.date === tISO;
     let lessons = selDay ? selDay.lessons : [];
     if (isToday) {
-      try { const td = await api("/schedule/day/" + tISO); lessons = td.lessons; } catch (e) {}
+      try { const td = await api("/schedule/day/" + tISO); lessons = td.lessons; dayNotice = td.day_notice || dayNotice; } catch (e) {}
+    }
+    if (!selDay) {
+      try { const dd = await api("/schedule/day/" + state.sch.date); dayNotice = dd.day_notice || ""; } catch (e) {}
     }
 
     v.innerHTML = `
@@ -453,6 +521,7 @@
         <button class="select-btn sq" id="next-search" title="Следующая пара">${I.search}</button>
       </div>
       ${chips}
+      ${dayNotice ? `<div class="day-notice">${esc(dayNotice)}</div>` : ""}
       <div class="card">
         <div class="card-title">${selDay ? WD[new Date(selDay.date + "T00:00:00").getDay() === 0 ? 6 : new Date(selDay.date + "T00:00:00").getDay() - 1] + ", " + fmtDate(selDay.date) : ""}
           <span class="right">${isToday ? "сегодня" : ""}</span></div>
@@ -469,13 +538,11 @@
       });
     });
     $("#day-sel").addEventListener("click", () => {
-      const has = new Set();
-      days.forEach((d) => { if (d.lessons.length) has.add(d.date); });
-      sheetCalendar(state.sch.date || tISO, has, (iso) => { state.sch.date = iso; renderSchedule(); });
+      sheetCalendar(state.sch.date || tISO, null, (iso) => selectDateAny(iso));
     });
     $("#next-search").addEventListener("click", openNextSearch);
     v.querySelectorAll(".chip[data-d]").forEach((c) => c.addEventListener("click", () => {
-      state.sch.date = c.dataset.d; haptic("light"); renderSchedule();
+      state.sch.date = c.dataset.d; state.sch.solo = null; haptic("light"); renderSchedule();
     }));
   }
 
@@ -490,6 +557,26 @@
         showLessonsModal(r.discipline, r.lessons || []);
       } catch (e) { toast(e.message, true); }
     });
+  }
+
+  function showHtmlModal(title, html) {
+    const root = $("#overlays");
+    const back = document.createElement("div");
+    back.className = "sheet-back";
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    modal.innerHTML = `
+      <div class="modal-head"><div class="modal-title"><span>${esc(title)}</span></div>
+      <button class="icon-btn" data-close>✕</button></div>
+      <div class="modal-body">${html}</div>`;
+    root.appendChild(back); root.appendChild(modal);
+    requestAnimationFrame(() => { back.classList.add("open"); modal.classList.add("open"); });
+    const close = () => {
+      back.classList.remove("open"); modal.classList.remove("open");
+      setTimeout(() => { back.remove(); modal.remove(); }, 220);
+    };
+    back.addEventListener("click", close);
+    modal.querySelector("[data-close]").addEventListener("click", close);
   }
 
   function showLessonsModal(discipline, lessons) {
@@ -521,6 +608,19 @@
     modal.querySelector("[data-close]").addEventListener("click", close);
   }
 
+  function sparkline(trend) {
+    const W = 220, H = 34, pad = 4;
+    const vals = trend.map((t) => t.avg);
+    const min = Math.min(...vals) - 0.2, max = Math.max(...vals) + 0.2;
+    const pts = vals.map((v, i) => {
+      const x = pad + (i * (W - 2 * pad)) / (vals.length - 1);
+      const y = H - pad - ((v - min) / (max - min)) * (H - 2 * pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    const lbl = trend.map((t, i) => `<text x="${(pad + (i * (W - 2 * pad)) / (vals.length - 1)).toFixed(1)}" y="${H - 1}" font-size="8" fill="var(--muted-2)" text-anchor="middle">${t.label}</text>`).join("");
+    return `<div class="spark-wrap"><svg viewBox="0 0 ${W} ${H}" class="spark"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>${lbl}</svg></div>`;
+  }
+
   /* ---------- Оценки ---------- */
   async function viewGrades(v) {
     v.innerHTML = skeleton(4);
@@ -540,12 +640,14 @@
             <circle cx="42" cy="42" r="36" stroke="var(--accent)" stroke-width="6" fill="none"
               stroke-linecap="round" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}"/>
           </svg><div class="donut-center"><b>${fmtAvg(g.avg)}</b><span>из 5</span></div></div>
-          <div><div class="stat-num" style="font-size:19px">${g.total}</div><div class="stat-label">оценок всего</div></div>
-        </div></div>
+          <div><div class="stat-num" style="font-size:19px">${g.total}</div><div class="stat-label">оценок всего</div>${g.group_avg != null ? `<div class="stat-label" style="margin-top:4px;color:var(--accent-2)">группа: ${fmtAvg(g.group_avg)}</div>` : ""}</div>
+        </div>
+        ${g.trend && g.trend.length >= 2 ? sparkline(g.trend) : ""}
+        </div>
         <div class="stat-card hbo">
-          <div class="hbo-cell"><div class="stat-num">${g.counts.h}</div><div class="stat-label">Н — пропуски</div></div>
-          <div class="hbo-cell"><div class="stat-num">${g.counts.b}</div><div class="stat-label">Б — болезни</div></div>
-          <div class="hbo-cell"><div class="stat-num">${g.counts.o}</div><div class="stat-label">О — опоздания</div></div>
+          <div class="drow"><div class="k" style="width:auto;font-weight:800">Н</div><div class="v" style="text-align:right"><b>${g.counts.h}</b></div></div>
+          <div class="drow"><div class="k" style="width:auto;font-weight:800">Б</div><div class="v" style="text-align:right"><b>${g.counts.b}</b></div></div>
+          <div class="drow"><div class="k" style="width:auto;font-weight:800">О</div><div class="v" style="text-align:right"><b>${g.counts.o}</b></div></div>
         </div>
       </div>
       <div class="card"><div class="card-title">Все дисциплины</div>
@@ -611,6 +713,10 @@
           <div class="set-ctrl"><div class="switch ${s.misc ? "on" : ""}" id="ms-sw"></div></div>
         </div>
         <div class="set-row">
+          <div><div class="set-name">Тихая пара</div><div class="set-sub">Напоминания молчат, пока идёт занятие</div></div>
+          <div class="set-ctrl"><div class="switch ${s.quiet ? "on" : ""}" id="q-sw"></div></div>
+        </div>
+        <div class="set-row">
           <div><div class="set-name">Важные и новые ДЗ</div><div class="set-sub">Посещаемость тоже</div></div>
           <div class="set-ctrl"><span class="locked">всегда включено</span></div>
         </div>
@@ -652,6 +758,13 @@
       e.currentTarget.classList.toggle("on", on); haptic("medium");
       me.settings.misc = on; await setSave({ misc: on });
     });
+    const qsw = $("#q-sw");
+    if (qsw) qsw.addEventListener("click", async (e) => {
+      const on = !e.currentTarget.classList.contains("on");
+      e.currentTarget.classList.toggle("on", on); haptic("medium");
+      me.settings.quiet = on; await setSave({ quiet: on });
+      toast(on ? "Тихая пара включена" : "Тихая пара выключена");
+    });
     document.querySelectorAll("#theme-seg button").forEach((b) => b.addEventListener("click", async () => {
       applyTheme(b.dataset.t); me.settings.theme = b.dataset.t;
       document.querySelectorAll("#theme-seg button").forEach((x) => x.classList.toggle("on", x === b));
@@ -665,7 +778,23 @@
       try { const s = await api("/attendance/summary"); $("#staff-sum-body").innerHTML = `<div class="detail-rows">${staffSummaryBody(s)}</div>`; }
       catch (e) { toast(e.message, true); }
     });
-  }
+    const wbtn = $("#staff-week-btn");
+    if (wbtn) wbtn.addEventListener("click", async () => {
+      try {
+        const r = await api("/attendance/week-summary");
+        const rows = (r.days || []).map((d) => `
+          <div class="modal-row">
+            <div class="modal-date">${esc(d.weekday)}, ${fmtDate(d.date)}${d.is_future ? " · впереди" : ""}</div>
+            <div class="drow"><div class="k" style="width:auto">На всех парах</div><div class="v" style="text-align:right">${d.full_count}</div></div>
+            <div class="drow"><div class="k" style="width:auto">Не будут</div><div class="v" style="text-align:right">${(d.none || []).length}</div></div>
+            <div class="drow"><div class="k" style="width:auto">Частично</div><div class="v" style="text-align:right">${(d.partial || []).length}</div></div>
+            <div class="drow"><div class="k" style="width:auto">Заболели</div><div class="v" style="text-align:right">${(d.sick || []).length}</div></div>
+            <div class="drow"><div class="k" style="width:auto">Без ответа</div><div class="v" style="text-align:right">${(d.no_answer || []).length}</div></div>
+          </div>`).join("");
+        showHtmlModal("Посещаемость за неделю", rows || "<div class='empty'>На этой неделе пар ещё не было</div>");
+      } catch (e) { toast(e.message, true); }
+    });
+      }
 
   /* ---------- Оверлеи (ДЗ / учебники) ---------- */
   const backBtn = tg && tg.BackButton ? tg.BackButton : null;

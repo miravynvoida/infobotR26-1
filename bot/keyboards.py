@@ -247,6 +247,12 @@ def cab_kb(s: dict) -> KB:
                     callback_data="cab:ms:tgl",
                 )
             ],
+            [
+                BTN(
+                    text=f"😴 Тихая пара: {'ВКЛ' if s.get('quiet') else 'выкл'}",
+                    callback_data="cab:q:tgl",
+                )
+            ],
             [BTN(text="🏠 Главное меню", callback_data="home")],
         ]
     )

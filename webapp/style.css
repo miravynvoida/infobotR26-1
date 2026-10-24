@@ -419,3 +419,30 @@ textarea.input { min-height: 84px; resize: vertical; }
 .modal-body { overflow-y: auto; padding: 4px 16px 16px; }
 .modal-date { font-size: 12px; font-weight: 700; color: var(--muted); margin: 10px 0 2px; }
 .modal-row .lesson { padding-top: 6px; padding-bottom: 6px; }
+
+/* ===== v3: новые блоки ===== */
+.chips .chip { flex: 1; min-width: 0; }
+.chips { display: flex; gap: 7px; }
+.tile.wide { text-align: left; }
+.day-notice {
+  background: var(--warn-soft); border: 1px solid var(--line); border-radius: 14px;
+  padding: 11px 13px; font-size: 13.5px; font-weight: 600; color: var(--warn); margin-bottom: 12px;
+}
+.dl-card { display: flex; align-items: center; gap: 12px; border-color: var(--line); }
+.dl-left { flex: 1; min-width: 0; }
+.dl-t { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.dl-name { font-weight: 800; font-size: 15px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.dl-days { flex: none; font-size: 26px; font-weight: 800; color: var(--accent-2); display: flex; align-items: baseline; gap: 2px; }
+.dl-days.hot { color: var(--danger); }
+.dl-days i { font-style: normal; font-size: 11px; color: var(--muted); }
+.streak-card { display: flex; align-items: center; gap: 12px; border-color: rgba(255,150,60,.35); }
+.streak-card .flame { font-size: 26px; }
+.timer-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 11px 13px; margin-bottom: 14px; }
+.timer-top { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+.timer-bar { height: 6px; border-radius: 4px; background: var(--card-2); overflow: hidden; }
+.timer-bar div { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .6s; }
+.spark-wrap { margin-top: 10px; }
+.spark { width: 100%; height: 38px; }
+.file-chip.tpl { cursor: pointer; border-color: var(--accent-soft); color: var(--accent-2); }
+img.emoji { height: 1em; width: 1em; margin: 0 .05em 0 .1em; vertical-align: -0.1em; }

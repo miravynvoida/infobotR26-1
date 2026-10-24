@@ -25,6 +25,7 @@ def cab_html(student: dict) -> str:
             "",
             "⚙️ <b>Уведомления</b>",
             "🔒 Важные, новые ДЗ и посещаемость — всегда включены.",
+            f"😴 Тихая пара (не дёргать во время занятий): {'вкл' if db.get_settings(student['id']).get('quiet') else 'выкл'}",
         ]
     )
 
@@ -126,6 +127,15 @@ async def np_set(cb: CallbackQuery, student: dict):
         return
     db.update_settings(student["id"], next_pair=1, next_pair_min=minutes)
     await cb.answer(f"✅ Буду напоминать за {minutes} мин")
+    await render(cb, student)
+
+
+@router.callback_query(F.data == "cab:q:tgl")
+async def quiet_toggle(cb: CallbackQuery, student: dict):
+    s = db.get_settings(student["id"])
+    new = 0 if s.get("quiet") else 1
+    db.update_settings(student["id"], quiet=new)
+    await cb.answer("😴 Тихая пара: ВКЛ (напоминания молчат на парах)" if new else "😴 Тихая пара: ВЫКЛ")
     await render(cb, student)
 
 

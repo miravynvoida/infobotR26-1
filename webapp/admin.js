@@ -15,6 +15,17 @@
     bc: { title: "📣 Уведомление всем", render: renderBroadcast },
   };
 
+  function confirmSheet(title) {
+    return new Promise((resolve) => {
+      let done = false;
+      A.sheetOptions(title, [
+        { label: "Да, подтверждаю", value: true },
+        { label: "Отмена", value: false },
+      ], (v) => { if (!done) { done = true; resolve(v); } });
+    });
+  }
+  window.AdminConfirm = confirmSheet;
+
   function open(name) {
     const s = screens[name];
     if (!s) return;
@@ -103,14 +114,17 @@
         <button class="btn danger" id="he-del">🗑 Удалить</button>
         <button class="btn ghost" id="he-back">◀ Назад</button>
       </div>`;
-    $("#he-back", body).addEventListener("click", reload);
+    $("#he-back", body).addEventListener("click", () => renderHw(body));
     $("#he-arc", body).addEventListener("click", async () => {
-      try { await api(`/admin/homework/${h.id}`, { method: "PATCH", body: { archived: !h.archived } }); toast(h.archived ? "Восстановлено" : "В архиве"); reload(); }
-      catch (e) { toast(e.message, true); }
+      try {
+        await api(`/admin/homework/${h.id}`, { method: "PATCH", body: { archived: !h.archived } });
+        toast(h.archived ? "Восстановлено" : "Перенесено в архив");
+        renderHw(body);
+      } catch (e) { toast(e.message, true); }
     });
     $("#he-del", body).addEventListener("click", async () => {
-      if (!confirm("Удалить задание полностью?")) return;
-      try { await api(`/admin/homework/${h.id}`, { method: "DELETE" }); toast("Удалено"); reload(); }
+      if (!(await confirmSheet("Удалить задание полностью?"))) return;
+      try { await api(`/admin/homework/${h.id}`, { method: "DELETE" }); toast("Удалено"); renderHw(body); }
       catch (e) { toast(e.message, true); }
     });
     $("#he-edit", body).addEventListener("click", () => renderHwForm(body, reload, h));
@@ -130,12 +144,26 @@
     };
     let dueOptions = [];
 
+    let recent = null;
+    async function loadRecent(discId) {
+      if (recent) return recent;
+      try {
+        const data = await api("/admin/homework");
+        recent = data.groups.flatMap((g) => g.items.map((i) => ({ ...i, disc: g.discipline })));
+      } catch (e) { recent = []; }
+      return recent;
+    }
+
     function draw() {
       const disc = discs.find((d) => d.id === f.discipline_id);
+      const recentChips = f.discipline_id
+        ? '<div class="field"><label>Недавние задания (шаблоны)</label><div class="file-chips" id="f-recent"></div></div>'
+        : "";
       body.innerHTML = `
         <div class="detail-page">
           <div class="muted" style="font-size:12.5px">${editing ? "Редактирование ДЗ" : "Новое ДЗ"}</div>
-          <div class="field mt8"><label>Дисциплина</label><button class="btn" id="f-disc" style="margin:0">${disc ? esc(disc.emoji + " " + disc.name) : "Выбрать дисциплину"}</button></div>
+          <div class="field mt8"><label>Дисциплина</label><button class="btn" id="f-disc" style="margin:0">${disc ? esc(disc.name) : "Выбрать дисциплину"}</button></div>
+          ${recentChips}
           <div class="field"><label>Название</label><input class="input" id="f-title" value="${esc(f.title)}" placeholder="Прочитать текст"></div>
           <div class="field"><label>Задание</label><textarea class="input" id="f-task" placeholder="Что нужно сделать">${esc(f.task)}</textarea></div>
           <div class="field"><label>Сдать до</label>
@@ -154,6 +182,24 @@
           <button class="btn ghost" id="f-back">◀ Назад</button>
         </div>`;
       $("#f-chips", body).innerHTML = f.files.map((x, i) => `<div class="file-chip">${esc(x.name || x.type)}<span class="x" data-i="${i}">✕</span></div>`).join("");
+      const recentBox = $("#f-recent", body);
+      if (recentBox) {
+        recentBox.innerHTML = '<span class="muted" style="font-size:12px">загружаю…</span>';
+        loadRecent(f.discipline_id).then((items) => {
+          const box = $("#f-recent", body);
+          if (!box) return;
+          const mine = items.filter((i) => i.disc.id === f.discipline_id).slice(-4).reverse();
+          box.innerHTML = mine.length
+            ? mine.map((i, idx) => `<div class="file-chip tpl" data-tpl="${idx}">${esc(i.title.slice(0, 26))}</div>`).join("")
+            : '<span class="muted" style="font-size:12px">пока нет — первые сами станут шаблонами</span>';
+          box.querySelectorAll("[data-tpl]").forEach((chip) => chip.addEventListener("click", () => {
+            const item = mine[+chip.dataset.tpl];
+            f.title = item.title; f.task = item.task || "";
+            haptic("light");
+            draw();
+          }));
+        });
+      }
       $("#f-chips", body).querySelectorAll(".x").forEach((x) => x.addEventListener("click", () => { f.files.splice(+x.dataset.i, 1); draw(); }));
       $("#f-disc", body).addEventListener("click", () => {
         sheetOptions("Дисциплина", discs.map((d) => ({ label: (d.emoji || "📚") + " " + d.name, value: d.id, on: d.id === f.discipline_id })), (v) => {
@@ -272,7 +318,7 @@
       });
       const dd = $("#day-del", body);
       if (dd) dd.addEventListener("click", async () => {
-        if (!confirm("Удалить всё расписание на этот день?")) return;
+        if (!(await confirmSheet("Удалить всё расписание на этот день?"))) return;
         try { await api(`/admin/schedule/day/${iso}`, { method: "DELETE" }); toast("Удалено"); renderDayEditor(body, iso); } catch (e) { toast(e.message, true); }
       });
       $("#day-back", body).addEventListener("click", () => renderScheduleAdmin(body));
@@ -357,11 +403,11 @@
       try { const r = await api(`/admin/students/${b.dataset.regen}`, { method: "PATCH", body: { action: "regen" } }); toast("Новый код: " + r.code); renderStudents(body); } catch (e) { toast(e.message, true); }
     }));
     body.querySelectorAll("[data-unl]").forEach((b) => b.addEventListener("click", async () => {
-      if (!confirm("Сбросить привязку к Telegram?")) return;
+      if (!(await confirmSheet("Сбросить привязку к Telegram?"))) return;
       try { await api(`/admin/students/${b.dataset.unl}`, { method: "PATCH", body: { action: "unlink" } }); toast("Привязка сброшена"); renderStudents(body); } catch (e) { toast(e.message, true); }
     }));
     body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
-      if (!confirm("Удалить студента вместе с оценками и посещаемостью?")) return;
+      if (!(await confirmSheet("Удалить студента вместе с оценками и посещаемостью?"))) return;
       try { await api(`/admin/students/${b.dataset.del}`, { method: "DELETE" }); toast("Удалён"); renderStudents(body); } catch (e) { toast(e.message, true); }
     }));
   }
@@ -399,7 +445,7 @@
       ];
       sheetOptions(d.name, opts, async (v) => {
         if (v === "del") {
-          if (!confirm(`Удалить «${d.name}»?`)) return;
+          if (!(await confirmSheet(`Удалить «${d.name}»?`))) return;
           try { await api(`/admin/disciplines/${d.id}`, { method: "DELETE" }); toast("Удалена"); renderDisc(body); } catch (e) { toast(e.message, true); }
           return;
         }
@@ -437,7 +483,7 @@
         { label: "🗑 Удалить", value: "del" },
       ], async (v) => {
         if (v === "del") {
-          if (!confirm("Удалить учебник?")) return;
+          if (!(await confirmSheet("Удалить учебник?"))) return;
           try { await api(`/admin/textbooks/${id}`, { method: "DELETE" }); toast("Удалён"); renderTbAdmin(body); } catch (e) { toast(e.message, true); }
           return;
         }
@@ -461,20 +507,40 @@
 
   /* ================= рассылка ================= */
   function renderBroadcast(body) {
+    let noticeDate = null;
+    const syncNd = () => {
+      $("#bc-nd", body).textContent = noticeDate || "Выбрать день";
+      $("#bc-nd-x", body).style.display = noticeDate ? "" : "none";
+    };
     body.innerHTML = `
       <div class="card">
         <div class="field"><label>Текст уведомления (важное — придёт всем)</label>
           <textarea class="input" id="bc-text" style="min-height:130px" placeholder="Текст…"></textarea></div>
-        <button class="btn primary" id="bc-send">📣 Отправить всем</button>
+        <div class="field"><label>Пометить день в расписании (необязательно)</label>
+          <div class="btn-row" style="margin:0">
+            <button class="btn" id="bc-nd" style="margin:0">Выбрать день</button>
+            <button class="btn danger" id="bc-nd-x" style="margin:0;flex:none;width:48px;display:none">✕</button>
+          </div>
+          <div class="stat-label" style="margin-top:6px">Например: «3-ю пару отменили — приходите к 13:50». Пометка появится над расписанием этого дня у всех.</div>
+        </div>
+        <button class="btn primary" id="bc-send">Отправить всем</button>
       </div>`;
+    $("#bc-nd", body).addEventListener("click", () => {
+      A.sheetCalendar(A.todayISO(), null, (iso) => { noticeDate = iso; syncNd(); });
+    });
+    $("#bc-nd-x", body).addEventListener("click", () => { noticeDate = null; syncNd(); });
     $("#bc-send", body).addEventListener("click", async () => {
       const text = $("#bc-text", body).value.trim();
       if (!text) { toast("Введите текст", true); return; }
-      if (!confirm("Отправить всем авторизованным студентам?")) return;
-      const btn = $("#bc-send", body); btn.disabled = true; btn.textContent = "⏳ Отправляю…";
-      try { const r = await api("/admin/broadcast", { method: "POST", body: { text } }); toast(`Отправлено: ${r.sent} из ${r.total}`); }
-      catch (e) { toast(e.message, true); }
-      btn.disabled = false; btn.textContent = "📣 Отправить всем";
+      if (!(await confirmSheet("Отправить всем авторизованным студентам?"))) return;
+      const btn = $("#bc-send", body); btn.disabled = true; btn.textContent = "Отправляю…";
+      try {
+        if (noticeDate) await api("/admin/day-notice", { method: "POST", body: { date: noticeDate, text } });
+        const r = await api("/admin/broadcast", { method: "POST", body: { text } });
+        toast(`Отправлено: ${r.sent} из ${r.total}${noticeDate ? " · день помечен" : ""}`);
+        $("#bc-text", body).value = "";
+      } catch (e) { toast(e.message, true); }
+      btn.disabled = false; btn.textContent = "Отправить всем";
     });
   }
 })();

@@ -728,7 +728,7 @@ async def draft_files_apply(cb: CallbackQuery, state: FSMContext):
     draft["files"] = files
     await state.update_data(draft=draft, files=[], fdel=[])
     await cb.answer()
-    await show_preview(cb, state, edit_message=cb.message)
+    await show_preview(cb, state)
 
 
 @router.callback_query(F.data == "hwd:cancel")
@@ -989,4 +989,7 @@ async def hw_edit_files_apply(cb: CallbackQuery, state: FSMContext):
     h = db.hw_by_id(hid)
     await state.clear()
     await cb.answer("Файлы обновлены")
-    await cb.message.edit_text(hw_full_html(h), reply_markup=hw_item_kb(h))
+    try:
+        await cb.message.edit_text(hw_full_html(h), reply_markup=hw_item_kb(h))
+    except TelegramBadRequest:
+        await cb.message.answer(hw_full_html(h), reply_markup=hw_item_kb(h))

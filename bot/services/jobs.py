@@ -87,11 +87,16 @@ async def tick(bot: Bot) -> None:
 
     # --- напоминания о парах (перед каждой парой, у каждого своя настройка)
     if lessons:
+        now_inside_lesson = any(
+            su.dt_on(day, ls["start"]) <= n < su.dt_on(day, ls["end"]) for ls in lessons
+        )
         for ls in lessons:
             start_dt = su.dt_on(day, ls["start"])
             for s in db.all_notify_settings():
                 if not s["next_pair"] or n >= start_dt:
                     continue
+                if s.get("quiet") and now_inside_lesson:
+                    continue  # «тихая пара»: во время занятия не дёргаем
                 target = start_dt - timedelta(minutes=s["next_pair_min"])
                 if _same_hm(n, target) and db.notif_once(
                     day, "pair", f"{ls['pair_no']}:{s['tg_id']}:{s['next_pair_min']}"

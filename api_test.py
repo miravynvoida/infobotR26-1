@@ -56,10 +56,16 @@ async def main():
         check("/api/me", r.status_code == 200 and r.json()["fio"].startswith("Аносов"), r.text[:200])
         check("me.group Р 26-1", r.json()["group"] == "Р 26-1")
         check("me.settings default 30/19:00", r.json()["settings"]["next_pair_min"] == 30 and r.json()["settings"]["tomorrow_time"] == "19:00")
+        check("me.streak есть", isinstance(r.json().get("streak"), int))
+        check("settings.quiet есть", isinstance(r.json()["settings"].get("quiet"), bool))
 
         r = await c.get("/api/today", headers=h)
         check("/api/today", r.status_code == 200 and "status_text" in r.json())
 
+        r = await c.post("/api/admin/day-notice", json={"date": "2026-11-03", "text": "3-ю пару отменили"}, headers=h)
+        check("day-notice сохранён", r.status_code == 200, r.text[:100])
+        r = await c.get("/api/schedule/day/2026-11-03", headers=h)
+        check("day-notice в дне", r.json().get("day_notice") == "3-ю пару отменили", r.text[:150])
         r = await c.get(f"/api/schedule/next/{did}?all=1", headers=h)
         check("/api/schedule/next?all", r.status_code == 200 and isinstance(r.json()["lessons"], list), r.text[:120])
         r = await c.get("/api/schedule/weeks", headers=h)
@@ -71,6 +77,7 @@ async def main():
         r = await c.get("/api/homework", headers=h)
         check("/api/homework groups", r.status_code == 200 and r.json()["groups"][0]["discipline"]["name"] == "Математика")
         hid = r.json()["groups"][0]["items"][0]["id"]
+        check("hw.task отдаётся", r.json()["groups"][0]["items"][0].get("task") == "Задание", r.text[:150])
         check("hw.new = True до просмотра", r.json()["groups"][0]["items"][0]["new"] is True)
         r = await c.get(f"/api/homework/{hid}", headers=h)
         check("/api/homework/{id}", r.status_code == 200)
@@ -118,6 +125,8 @@ async def main():
         r = await c.post("/api/admin/grades/sync", headers=h)
         check("sync без настроек → ok False с ошибкой", r.status_code == 200 and r.json()["ok"] is False)
 
+        r = await c.get("/api/attendance/week-summary", headers=h)
+        check("week-summary для стаффа", r.status_code == 200 and "days" in r.json(), r.text[:120])
         r = await c.get("/api/me")
         check("без токена — 401", r.status_code == 401)
 

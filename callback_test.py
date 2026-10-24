@@ -84,7 +84,7 @@ async def main() -> int:
         "hw", f"hw:{did}", f"hw:v:{hid}", f"hw:done:{hid}", "hw:dl",
         "tb", f"tb:{did}", "tb:v:1",
         "sch", "sch:d:2026-10-24", "sch:cal", "sch:cal:2026-10",
-        "cab", "cab:np:tgl", "cab:np:menu", "cab:np:30", "cab:tm:tgl", "cab:tm:menu",
+        "cab", "cab:np:tgl", "cab:np:menu", "cab:np:30", "cab:tm:tgl", "cab:tm:menu", "cab:q:tgl",
         "cab:tm:19:00", "cab:tm:c", "cab:ms:tgl",
         "att:full:20261024", "att:none:20261024", "att:partial:20261024", "att:t:1", "att:ok",
         "home", "noop",
