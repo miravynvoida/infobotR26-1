@@ -44,9 +44,17 @@ async def send_attendance_ask(bot: Bot, st: dict, day_iso: str, first_start: str
 
 
 async def tick(bot: Bot) -> None:
+    try:
+        await _tick_inner(bot)
+    except Exception:
+        log.exception("tick упал целиком")
+
+
+async def _tick_inner(bot: Bot) -> None:
     n = su.now()
     day = su.iso(n.date())
     lessons = db.day_lessons(day)
+    muted = db.muted_tg_ids()
 
     # --- опрос посещаемости: вопрос за 60 мин, напоминания, сводка за 5 мин
     if lessons:
@@ -56,7 +64,7 @@ async def tick(bot: Bot) -> None:
         ask_dt = first_dt - timedelta(minutes=config.cfg.attendance_ask_minutes)
         if _same_hm(n, ask_dt):
             for st in db.authorized_students():
-                if db.get_attendance(day, st["id"]):
+                if st["tg_id"] in muted or db.get_attendance(day, st["id"]):
                     continue
                 if db.notif_once(day, "att_ask", str(st["tg_id"])):
                     await send_attendance_ask(bot, st, day, first["start"])
@@ -65,7 +73,7 @@ async def tick(bot: Bot) -> None:
             rem_dt = first_dt - timedelta(minutes=off)
             if _same_hm(n, rem_dt):
                 for st in db.authorized_students():
-                    if db.get_attendance(day, st["id"]):
+                    if st["tg_id"] in muted or db.get_attendance(day, st["id"]):
                         continue
                     if db.notif_once(day, "att_rem", f"{st['tg_id']}:{off}"):
                         await _safe_send(
@@ -93,7 +101,7 @@ async def tick(bot: Bot) -> None:
         for ls in lessons:
             start_dt = su.dt_on(day, ls["start"])
             for s in db.all_notify_settings():
-                if not s["next_pair"] or n >= start_dt:
+                if s["tg_id"] in muted or not s["next_pair"] or n >= start_dt:
                     continue
                 if s.get("quiet") and now_inside_lesson:
                     continue  # «тихая пара»: во время занятия не дёргаем
@@ -116,7 +124,7 @@ async def tick(bot: Bot) -> None:
     tomorrow_iso = su.iso(n.date() + timedelta(days=1))
     hw_due = db.hw_due_on(tomorrow_iso)
     for s in db.all_notify_settings():
-        if not hw_due or not s.get("hw_tomorrow"):
+        if s["tg_id"] in muted or not hw_due or not s.get("hw_tomorrow"):
             continue
         tt = su.parse_hm(s.get("hw_tomorrow_time") or "18:00")
         if tt and _same_hm(n.time(), tt) and db.notif_once(day, "hw_tmrw", str(s["tg_id"])):
@@ -131,7 +139,7 @@ async def tick(bot: Bot) -> None:
     tmrw_lessons = db.day_lessons(tomorrow)
     if tmrw_lessons:
         for s in db.all_notify_settings():
-            if not s["tomorrow"]:
+            if s["tg_id"] in muted or not s["tomorrow"]:
                 continue
             tt = su.parse_hm(s["tomorrow_time"])
             if tt and _same_hm(n.time(), tt) and db.notif_once(day, "tmrw", str(s["tg_id"])):

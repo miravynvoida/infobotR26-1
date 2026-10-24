@@ -567,7 +567,10 @@ async def hw_publish(cb: CallbackQuery, state: FSMContext, student: dict):
     await state.clear()
     h = db.hw_by_id(hid)
     sent = 0
+    muted = db.muted_tg_ids()
     for st in db.authorized_students():
+        if st["tg_id"] in muted:
+            continue
         try:
             await cb.bot.send_message(
                 st["tg_id"],

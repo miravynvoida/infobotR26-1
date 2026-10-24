@@ -66,7 +66,10 @@ async def admin_ask_day(cb: CallbackQuery):
         await cb.answer("Сегодня пар нет", show_alert=True)
         return
     sent = 0
+    muted = db.muted_tg_ids()
     for st in db.authorized_students():
+        if st["tg_id"] in muted:
+            continue
         try:
             await send_attendance_ask(cb.bot, st, day, lessons[0]["start"])
             sent += 1
@@ -94,7 +97,10 @@ async def admin_ask_pair(cb: CallbackQuery):
         await cb.answer("Пара не найдена", show_alert=True)
         return
     sent = 0
+    muted = db.muted_tg_ids()
     for st in db.authorized_students():
+        if st["tg_id"] in muted:
+            continue
         try:
             await cb.bot.send_message(
                 st["tg_id"],

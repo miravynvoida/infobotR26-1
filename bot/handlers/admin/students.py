@@ -27,9 +27,16 @@ def student_kb(st: dict) -> InlineKeyboardMarkup:
         unlink = B(text="🔓 Отвязать TG", callback_data=f"adm:stu:unl:{st['id']}")
     else:
         unlink = B(text="⚪ Не авторизован", callback_data="noop")
+    muted = db.is_muted(st["id"])
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [B(text="🔄 Новый код", callback_data=f"adm:stu:code:{st['id']}"), unlink],
+            [
+                B(
+                    text="🔕 Уведомления: включить" if muted else "🔔 Отключить все уведомления",
+                    callback_data=f"adm:stu:{'unmut' if muted else 'mut'}:{st['id']}",
+                )
+            ],
             [B(text="🗑 Удалить", callback_data=f"adm:stu:delc:{st['id']}")],
             [B(text="◀ К списку", callback_data="adm:studs")],
         ]
@@ -45,10 +52,17 @@ def student_html(st: dict) -> str:
         status += ")"
     else:
         status = "⚪ Не авторизован"
+    muted = db.is_muted(st["id"])
+    mute_line = (
+        "🔕 <b>Все уведомления отключены администратором</b>"
+        if muted
+        else "🔔 Уведомления включены"
+    )
     return (
         f"👤 <b>{su.esc(st['fio'])}</b>\n\n"
         f"{status}\n"
-        f"🔑 Код входа: <code>{st['code']}</code>"
+        f"🔑 Код входа: <code>{st['code']}</code>\n"
+        f"{mute_line}"
     )
 
 
@@ -102,6 +116,13 @@ async def student_actions(cb: CallbackQuery, state: FSMContext):
         await cb.message.edit_text(
             student_html(st) + "\n\n🔓 Привязка к Telegram сброшена.", reply_markup=student_kb(st)
         )
+    elif action in ("mut", "unmut"):
+        db.set_mute(st["id"], action == "mut")
+        await cb.answer("🔕 Уведомления отключены" if action == "mut" else "🔔 Уведомления включены")
+        try:
+            await cb.message.edit_text(student_html(st), reply_markup=student_kb(st))
+        except TelegramBadRequest:
+            pass
     elif action == "delc":
         await cb.answer()
         await cb.message.edit_text(

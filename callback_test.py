@@ -106,6 +106,7 @@ async def main() -> int:
         "asch:pa:2026-10-24", f"asch:pan:2026-10-24:2", f"asch:pad:2026-10-24:2:{did}",
         "asch:pat:2026-10-24:2:ПР",
         "adm:studs", "adm:stu:add", "adm:stu:1", "adm:stu:code:1", "adm:stu:unl:1",
+        "adm:stu:mut:1", "adm:stu:unmut:1",
         "adm:stu:delc:1", "adm:stu:del:1",
         "adm:disc", "adm:di:add", "adm:di:1", "adm:di:f:1:name", "adm:di:f:1:emoji",
         "adm:di:f:1:teacher", "adm:di:delc:1", "adm:di:del:1",

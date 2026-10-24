@@ -209,6 +209,8 @@ def init() -> None:
             _conn.execute("ALTER TABLE notify_settings ADD COLUMN hw_tomorrow INTEGER NOT NULL DEFAULT 1")
         if "hw_tomorrow_time" not in cols:
             _conn.execute("ALTER TABLE notify_settings ADD COLUMN hw_tomorrow_time TEXT NOT NULL DEFAULT '18:00'")
+        if "admin_mute" not in cols:
+            _conn.execute("ALTER TABLE notify_settings ADD COLUMN admin_mute INTEGER NOT NULL DEFAULT 0")
         _conn.commit()
     if not q("SELECT 1 FROM students LIMIT 1"):
         codes: list[tuple[str, str]] = []
@@ -468,7 +470,7 @@ def archive_due_homework(day_iso: str, when: str) -> int:
 
 
 def hw_due_on(day_iso: str) -> list[dict]:
-    return q(HW_SQL + " WHERE h.archived=0 AND h.due_date=? ORDER BY h.discipline, h.due_date", (day_iso,))
+    return q(HW_SQL + " WHERE h.archived=0 AND h.due_date=? ORDER BY d.name, h.due_date", (day_iso,))
 
 
 def mark_viewed(sid: int, hid: int, when: str) -> None:
@@ -609,6 +611,26 @@ def update_settings(sid: int, **fields) -> None:
 
 def all_notify_settings() -> list[dict]:
     return q("SELECT n.*, s.tg_id, s.fio FROM notify_settings n JOIN students s ON s.id=n.student_id WHERE s.tg_id IS NOT NULL")
+
+
+def set_mute(sid: int, muted: bool) -> None:
+    get_settings(sid)
+    ex("UPDATE notify_settings SET admin_mute=? WHERE student_id=?", (1 if muted else 0, sid))
+
+
+def is_muted(sid: int) -> bool:
+    row = one("SELECT admin_mute FROM notify_settings WHERE student_id=?", (sid,))
+    return bool(row and row["admin_mute"])
+
+
+def muted_tg_ids() -> set[int]:
+    return {
+        r["tg_id"]
+        for r in q(
+            "SELECT s.tg_id FROM notify_settings n JOIN students s ON s.id=n.student_id"
+            " WHERE n.admin_mute=1 AND s.tg_id IS NOT NULL"
+        )
+    }
 
 
 def notif_once(day: str, kind: str, key: str) -> bool:

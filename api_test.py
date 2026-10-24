@@ -76,6 +76,7 @@ async def main():
         wn = r.json()["weeks"][0]["n"]
         r = await c.get(f"/api/schedule/week/{wn}", headers=h)
         check("/api/schedule/week", r.status_code == 200 and len(r.json()["days"]) == 7)
+        check("day_notice у каждого дня недели", all("day_notice" in d for d in r.json()["days"]))
 
         r = await c.get("/api/homework", headers=h)
         check("/api/homework groups", r.status_code == 200 and r.json()["groups"][0]["discipline"]["name"] == "Математика")
@@ -112,6 +113,15 @@ async def main():
         check("/api/admin/stats", r.status_code == 200 and r.json()["students_total"] == 25, r.text[:200])
         r = await c.get("/api/admin/students", headers=h)
         check("/api/admin/students", r.status_code == 200 and len(r.json()) == 25)
+        sid = r.json()[0]["id"]
+        r = await c.patch(f"/api/admin/students/{sid}", json={"action": "mute"}, headers=h)
+        check("PATCH mute", r.status_code == 200, r.text[:100])
+        r = await c.get("/api/admin/students", headers=h)
+        check("muted в списке студентов", any(s["id"] == sid and s["muted"] for s in r.json()))
+        r = await c.patch(f"/api/admin/students/{sid}", json={"action": "unmute"}, headers=h)
+        check("PATCH unmute", r.status_code == 200, r.text[:100])
+        r = await c.get("/api/admin/students", headers=h)
+        check("unmute снял заглушку", all(not s["muted"] for s in r.json()))
         r = await c.get("/api/admin/homework", headers=h)
         check("/api/admin/homework", r.status_code == 200 and len(r.json()["groups"]) == 1)
         r = await c.get(f"/api/admin/next-lessons/{did}", headers=h)

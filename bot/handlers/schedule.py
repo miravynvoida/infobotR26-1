@@ -5,6 +5,7 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery
 
+from .. import db
 from ..keyboards import day_nav_kb, month_kb, sch_menu_kb
 from ..services import schedule_utils as su
 
@@ -19,6 +20,9 @@ async def show_day(cb: CallbackQuery, day_iso: str):
         d = date.fromisoformat(day_iso)
         extra = " (воскресенье — выходной)" if d.weekday() == 6 else ""
         text = f"📭 <b>На этот день ещё нет расписания.</b>{extra}"
+    notice = db.kv_get(f"day_notice_{day_iso}", "")
+    if notice:
+        text = f"⚠️ <b>Метка дня:</b> {su.esc(notice)}\n\n{text}"
     try:
         await cb.message.edit_text(text, reply_markup=day_nav_kb(day_iso))
     except TelegramBadRequest:

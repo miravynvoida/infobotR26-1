@@ -202,6 +202,22 @@ body {
 .donut-center b { font-size: 19px; }
 .donut-center span { font-size: 10px; color: var(--muted); }
 
+/* Оценки: две колонки — слева статистика (кольцо + счётчик + Н/Б/О), справа дисциплины */
+.grades-cols { display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr); gap: 10px; align-items: start; margin-bottom: 14px; }
+.grades-left { padding: 12px; text-align: left; min-width: 0; }
+.grades-left .donut-wrap { gap: 12px; }
+.grades-left .hbo-table { background: var(--card-2); border-radius: 12px; padding: 2px 12px; margin-top: 12px; }
+.grades-left .hbo-row { padding: 9px 0; font-size: 14px; }
+.grades-right { padding: 12px; min-width: 0; }
+.grades-right .card-title { font-size: 14px; margin-bottom: 4px; }
+.grades-right .disc-head { gap: 7px; padding: 9px 2px; }
+.grades-right .disc-name { font-size: 12.5px; line-height: 1.25; min-width: 0; overflow-wrap: break-word; }
+.grades-right .disc-avg { font-size: 13px; flex: none; }
+.grades-right .disc-grades { gap: 6px; padding: 2px 2px 10px; }
+@media (max-width: 359px) {
+  .grades-cols { grid-template-columns: 1fr; }
+}
+
 .disc-row { border-bottom: 1px solid var(--line); }
 .disc-row:last-child { border-bottom: none; }
 .disc-head { display: flex; align-items: center; gap: 10px; padding: 12px 2px; cursor: pointer; }

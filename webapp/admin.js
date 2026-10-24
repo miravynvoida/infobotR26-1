@@ -540,7 +540,8 @@
         <div class="a-row">
           <div class="st-dot ${s.authorized ? "on" : "off"}"></div>
           <div class="grow"><div class="a-name">${esc(s.fio)}</div>
-          <div class="a-sub">${s.authorized ? "🟢 авторизован" : "⚪ не авторизован"} · код <span class="code">${esc(s.code)}</span></div></div>
+          <div class="a-sub">${s.authorized ? "🟢 авторизован" : "⚪ не авторизован"} · код <span class="code">${esc(s.code)}</span>${s.muted ? " · 🔕 без уведомлений" : ""}</div></div>
+          <button class="mini-btn ${s.muted ? "" : "danger"}" data-mut="${s.id}" data-mstate="${s.muted ? 1 : 0}" title="${s.muted ? "Включить уведомления" : "Отключить все уведомления"}">${s.muted ? "🔔" : "🔕"}</button>
           <button class="mini-btn" data-regen="${s.id}">🔑</button>
           <button class="mini-btn" data-unl="${s.id}">🔓</button>
           <button class="mini-btn danger" data-del="${s.id}">🗑</button>
@@ -551,6 +552,11 @@
       try { const r = await api("/admin/students", { method: "POST", body: { fio: fio.trim() } }); toast(`Добавлен. Код: ${r.code}`); renderStudents(body); }
       catch (e) { toast(e.message, true); }
     });
+    body.querySelectorAll("[data-mut]").forEach((b) => b.addEventListener("click", async () => {
+      const act = b.dataset.mstate === "1" ? "unmute" : "mute";
+      if (act === "mute" && !(await confirmSheet("Отключить ВСЕ уведомления этому студенту?"))) return;
+      try { await api(`/admin/students/${b.dataset.mut}`, { method: "PATCH", body: { action: act } }); toast(act === "mute" ? "Уведомления отключены" : "Уведомления включены"); renderStudents(body); } catch (e) { toast(e.message, true); }
+    }));
     body.querySelectorAll("[data-regen]").forEach((b) => b.addEventListener("click", async () => {
       try { const r = await api(`/admin/students/${b.dataset.regen}`, { method: "PATCH", body: { action: "regen" } }); toast("Новый код: " + r.code); renderStudents(body); } catch (e) { toast(e.message, true); }
     }));

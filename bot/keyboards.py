@@ -243,6 +243,13 @@ def cab_kb(s: dict) -> KB:
             ],
             [
                 BTN(
+                    text=f"📚 ДЗ на завтра: {'ВКЛ' if s.get('hw_tomorrow') else 'выкл'}",
+                    callback_data="cab:hw:tgl",
+                ),
+                BTN(text=f"🕐 {s.get('hw_tomorrow_time') or '18:00'}", callback_data="cab:hw:menu"),
+            ],
+            [
+                BTN(
                     text=f"💤 Прочие: {'ВКЛ' if s['misc'] else 'выкл'}",
                     callback_data="cab:ms:tgl",
                 )
@@ -252,13 +259,6 @@ def cab_kb(s: dict) -> KB:
                     text=f"😴 Тихая пара: {'ВКЛ' if s.get('quiet') else 'выкл'}",
                     callback_data="cab:q:tgl",
                 )
-            ],
-            [
-                BTN(
-                    text=f"📚 ДЗ на завтра: {'ВКЛ' if s.get('hw_tomorrow') else 'выкл'}",
-                    callback_data="cab:hw:tgl",
-                ),
-                BTN(text=f"🕐 {s.get('hw_tomorrow_time') or '18:00'}", callback_data="cab:hw:menu"),
             ],
             [BTN(text="🏠 Главное меню", callback_data="home")],
         ]

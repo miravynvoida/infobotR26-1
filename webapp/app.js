@@ -36,11 +36,12 @@
   }
 
   function renderMaintenanceScreen(until) {
+    try { document.title = "Идут технические работы"; } catch (e) {}
     appEl.innerHTML = `
       <div class="boot">
         <div class="boot-logo">🛠</div>
-        <div class="boot-title">Технические работы</div>
-        <div class="boot-sub">${until ? "до " + esc(until) : "скоро всё вернёмся"}</div>
+        <div class="boot-title">Идут технические работы</div>
+        <div class="boot-sub">${until ? "Дневник студента вернётся до " + esc(until) : "Дневник студента скоро вернётся"}</div>
       </div>`;
   }
 
@@ -53,9 +54,11 @@
     if (r.status === 401) { renderBootError("Сессия истекла. Закройте и откройте приложение заново."); throw new Error("unauthorized"); }
     if (r.status === 503) {
       let until = "";
-      try { until = String(data.detail || "").replace("tech_works:", ""); } catch (e) {}
+      try { const j = await r.json(); until = String(j.detail || "").replace("tech_works:", ""); } catch (e) {}
       renderMaintenanceScreen(until);
-      throw new Error("maintenance");
+      const mErr = new Error("maintenance");
+      mErr.maintenance = true;
+      throw mErr;
     }
     let data = null;
     try { data = await r.json(); } catch (e) {}
@@ -238,7 +241,7 @@
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
     const v = $("#view");
     const run = async (fn) => {
-      try { await fn(v); } catch (e) { v.innerHTML = `<div class="card"><div class="empty">Ошибка экрана: ${esc(e && e.message || e)}</div></div>`; }
+      try { await fn(v); } catch (e) { if (e && e.maintenance) return; v.innerHTML = `<div class="card"><div class="empty">Ошибка экрана: ${esc(e && e.message || e)}</div></div>`; }
     };
     if (tab === "main") run(viewMain);
     else if (tab === "schedule") run(viewSchedule);
@@ -544,6 +547,8 @@
     if (!selDay && state.sch.solo && state.sch.solo.date === state.sch.date) {
       selDay = { date: state.sch.solo.date, lessons: state.sch.solo.lessons || [] };
       dayNotice = state.sch.solo.day_notice || "";
+    } else if (selDay) {
+      dayNotice = selDay.day_notice || "";
     }
     const isToday = state.sch.date === tISO;
     let lessons = selDay ? selDay.lessons : [];
@@ -687,8 +692,8 @@
         <button data-g="rating">Рейтинг группы</button>
       </div>
       <div id="grades-mine">
-      <div class="stat-grid">
-        <div class="stat-card"><div class="donut-wrap">
+      <div class="grades-cols">
+        <div class="stat-card grades-left"><div class="donut-wrap">
           <div class="donut"><svg width="84" height="84">
             <circle cx="42" cy="42" r="36" stroke="var(--card-2)" stroke-width="6" fill="none"/>
             <circle cx="42" cy="42" r="36" stroke="var(--accent)" stroke-width="6" fill="none"
@@ -696,13 +701,13 @@
           </svg><div class="donut-center"><b>${fmtAvg(g.avg)}</b><span>из 5</span></div></div>
           <div><div class="stat-num" style="font-size:19px">${g.total}</div><div class="stat-label">оценок всего</div></div>
         </div>
-        <div class="stat-card hbo-table">
+        <div class="hbo-table">
           <div class="hbo-row"><span>Н</span><b>${g.counts.h}</b></div>
           <div class="hbo-row"><span>Б</span><b>${g.counts.b}</b></div>
           <div class="hbo-row"><span>О</span><b>${g.counts.o}</b></div>
         </div>
-      </div>
-      <div class="card"><div class="card-title">Все дисциплины</div>
+        </div>
+        <div class="card grades-right"><div class="card-title">Все дисциплины</div>
         ${g.disciplines.map((d) => `
           <div class="disc-row" data-disc="${d.id}">
             <div class="disc-head">
@@ -713,6 +718,7 @@
             </div>
             <div class="disc-grades">${d.grades.length ? d.grades.map((x) => gradePill(x)).join("") : '<span class="muted" style="font-size:12.5px">Оценок пока нет</span>'}</div>
           </div>`).join("")}
+      </div>
       </div>
       </div>
       <div id="grades-rating" style="display:none"></div>`;
@@ -787,6 +793,7 @@
         <div class="drow"><div class="k">Опоздания (О)</div><div class="v"><b>${me.stats.o}</b></div></div>
       </div>
       <div class="card"><div class="card-title">Уведомления</div>
+        ${s.muted ? `<div class="day-notice" style="margin:0 0 10px">🔕 Все уведомления отключены администратором</div>` : ""}
         <div class="set-row">
           <div><div class="set-name">О следующей паре</div><div class="set-sub">Перед каждой парой</div></div>
           <div class="set-ctrl">
@@ -802,19 +809,19 @@
           </div>
         </div>
         <div class="set-row">
+          <div><div class="set-name">ДЗ на завтра</div><div class="set-sub">Отдельное напоминание, не зависит от расписания</div></div>
+          <div class="set-ctrl">
+            <select class="mini-select" id="hw-tm-time">${["16:00", "17:00", "18:00", "19:00", "20:00", "21:00"].map((t) => `<option ${s.hw_tomorrow_time === t ? "selected" : ""}>${t}</option>`).join("")}</select>
+            <div class="switch ${s.hw_tomorrow ? "on" : ""}" id="hw-tm-sw"></div>
+          </div>
+        </div>
+        <div class="set-row">
           <div><div class="set-name">Прочие уведомления</div><div class="set-sub">Обновления и мелочи</div></div>
           <div class="set-ctrl"><div class="switch ${s.misc ? "on" : ""}" id="ms-sw"></div></div>
         </div>
         <div class="set-row">
           <div><div class="set-name">Тихая пара</div><div class="set-sub">Напоминания молчат, пока идёт занятие</div></div>
           <div class="set-ctrl"><div class="switch ${s.quiet ? "on" : ""}" id="q-sw"></div></div>
-        </div>
-        <div class="set-row">
-          <div><div class="set-name">ДЗ на завтра</div><div class="set-sub">Отдельное напоминание, не зависит от расписания</div></div>
-          <div class="set-ctrl">
-            <select class="mini-select" id="hw-tm-time">${["16:00", "17:00", "18:00", "19:00", "20:00", "21:00"].map((t) => `<option ${s.hw_tomorrow_time === t ? "selected" : ""}>${t}</option>`).join("")}</select>
-            <div class="switch ${s.hw_tomorrow ? "on" : ""}" id="hw-tm-sw"></div>
-          </div>
         </div>
         <div class="set-row">
           <div><div class="set-name">Важные и новые ДЗ</div><div class="set-sub">Посещаемость тоже</div></div>
@@ -1079,6 +1086,7 @@
       renderShell();
       showTab("main");
     } catch (e) {
+      if (e && e.maintenance) return;
       renderBootError(e.message || "Не удалось войти. Откройте приложение из бота.");
     }
   }

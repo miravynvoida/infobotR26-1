@@ -48,7 +48,10 @@ async def bc_go(cb: CallbackQuery, state: FSMContext):
     await cb.answer("Отправляю…")
     sent = 0
     total = 0
+    muted = db.muted_tg_ids()
     for st in db.authorized_students():
+        if st["tg_id"] in muted:
+            continue
         total += 1
         try:
             await cb.bot.send_message(st["tg_id"], text)

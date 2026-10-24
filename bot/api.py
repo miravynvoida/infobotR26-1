@@ -175,6 +175,7 @@ def api_me(user: dict = Depends(cur)):
             "hw_tomorrow": bool(s["hw_tomorrow"]),
             "hw_tomorrow_time": s["hw_tomorrow_time"],
             "theme": s["theme"],
+            "muted": bool(s.get("admin_mute")),
         },
         "exam_week": mnt.exam_week_state(),
         "is_admin": user["tg_id"] in config.cfg.admin_ids,
@@ -244,6 +245,7 @@ def api_schedule_week(n: int, user: dict = Depends(cur)):
             {
                 "date": d.isoformat(),
                 "weekday": su.WEEKDAYS_FULL[d.weekday()],
+                "day_notice": day_notice(d.isoformat()),
                 "lessons": [lesson_dict(ls) for ls in lessons],
             }
         )
@@ -576,7 +578,10 @@ async def api_admin_ask(body: AdminAskBody, user: dict = Depends(adm)):
             "Будете ли вы сегодня на парах?"
         )
     sent = 0
+    muted = db.muted_tg_ids()
     for st in db.authorized_students():
+        if st["tg_id"] in muted:
+            continue
         try:
             await send_message_html(st["tg_id"], text, kb)
             sent += 1
@@ -682,6 +687,7 @@ def api_admin_students(user: dict = Depends(adm)):
         {
             "id": s["id"], "fio": s["fio"], "code": s["code"], "authorized": bool(s["tg_id"]),
             "tg_id": s["tg_id"], "authorized_at": s["authorized_at"],
+            "muted": db.is_muted(s["id"]),
         }
         for s in db.all_students()
     ]
@@ -700,7 +706,7 @@ def api_admin_student_add(body: StudentBody, user: dict = Depends(adm)):
 
 
 class StudentPatch(BaseModel):
-    action: str  # regen | unlink
+    action: str  # regen | unlink | mute | unmute
 
 
 @app.patch("/api/admin/students/{sid}")
@@ -711,6 +717,12 @@ def api_admin_student_patch(sid: int, body: StudentPatch, user: dict = Depends(a
         return {"code": db.regen_code(sid)}
     if body.action == "unlink":
         db.unlink_tg(sid)
+        return {"ok": True}
+    if body.action == "mute":
+        db.set_mute(sid, True)
+        return {"ok": True}
+    if body.action == "unmute":
+        db.set_mute(sid, False)
         return {"ok": True}
     raise HTTPException(400, "Неизвестное действие")
 
@@ -824,7 +836,10 @@ async def api_admin_hw_create(body: HwBody, user: dict = Depends(adm)):
     )
     h = db.hw_by_id(hid)
     sent = 0
+    muted = db.muted_tg_ids()
     for st in db.authorized_students():
+        if st["tg_id"] in muted:
+            continue
         try:
             await send_message_html(
                 st["tg_id"],
@@ -1081,7 +1096,10 @@ async def api_admin_broadcast(body: BroadcastBody, user: dict = Depends(adm)):
         raise HTTPException(400, "Пустой текст")
     sent = 0
     total = 0
+    muted = db.muted_tg_ids()
     for st in db.authorized_students():
+        if st["tg_id"] in muted:
+            continue
         total += 1
         try:
             await send_message_html(st["tg_id"], text)
