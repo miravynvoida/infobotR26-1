@@ -503,6 +503,60 @@ class AttBody(BaseModel):
     missing_pairs: list[int] = []
 
 
+@app.post("/api/attendance/reset")
+def api_attendance_reset(user: dict = Depends(cur)):
+    db.reset_attendance(su.iso(su.today()), user["student"]["id"])
+    return {"ok": True}
+
+
+class AdminAskBody(BaseModel):
+    mode: str = "day"  # day | pair
+    pair_no: int | None = None
+
+
+@app.post("/api/admin/attendance/ask")
+async def api_admin_ask(body: AdminAskBody, user: dict = Depends(adm)):
+    from .services.tg_files import send_message_html
+
+    day = su.iso(su.today())
+    lessons = db.day_lessons(day)
+    if body.mode == "pair":
+        ls = next((x for x in lessons if x["pair_no"] == body.pair_no), None)
+        if ls is None:
+            raise HTTPException(400, "Сегодня нет такой пары")
+        kb = [[
+            {"text": "Буду", "callback_data": f"att2:y:{ls['pair_no']}:{day.replace('-', '')}"},
+            {"text": "Не буду", "callback_data": f"att2:n:{ls['pair_no']}:{day.replace('-', '')}"},
+        ]]
+        text = (
+            f"📋 <b>Будете ли вы на паре {ls['pair_no']}?</b>\n"
+            f"<b>{ls['discipline']}</b> · {ls['start']}–{ls['end']}"
+        )
+    else:
+        if not lessons:
+            raise HTTPException(400, "Сегодня пар нет")
+        d = day.replace("-", "")
+        kb = [
+            [{"text": "Да, буду на всех", "callback_data": f"att:full:{d}"},
+             {"text": "Не буду", "callback_data": f"att:none:{d}"}],
+            [{"text": "Частично", "callback_data": f"att:partial:{d}"},
+             {"text": "Заболел", "callback_data": f"att:sick:{d}"}],
+            [{"text": "Сбросить мой ответ", "callback_data": f"att:reset:{d}"}],
+        ]
+        text = (
+            f"👋 <b>Сегодня {len(lessons)} пар(ы). Первая — в {lessons[0]['start']}.</b>\n\n"
+            "Будете ли вы сегодня на парах?"
+        )
+    sent = 0
+    for st in db.authorized_students():
+        try:
+            await send_message_html(st["tg_id"], text, kb)
+            sent += 1
+        except Exception:
+            continue
+    return {"sent": sent}
+
+
 @app.post("/api/attendance")
 def api_attendance(body: AttBody, user: dict = Depends(cur)):
     if body.status not in ("full", "none", "partial", "sick"):
@@ -537,7 +591,12 @@ def api_admin_day_notice(body: DayNoticeBody, user: dict = Depends(adm)):
         date.fromisoformat(body.date)
     except ValueError:
         raise HTTPException(400, "Неверная дата")
-    db.kv_set(f"day_notice_{body.date}", body.text.strip())
+    if len(body.text) > 300:
+        raise HTTPException(400, "Текст метки слишком длинный (макс. 300 символов)")
+    try:
+        db.kv_set(f"day_notice_{body.date}", body.text.strip())
+    except Exception as e:  # вместо непонятного 500
+        raise HTTPException(400, f"Не удалось сохранить метку: {e}")
     return {"ok": True}
 
 

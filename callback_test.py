@@ -87,7 +87,7 @@ async def main() -> int:
         "cab", "cab:np:tgl", "cab:np:menu", "cab:np:30", "cab:tm:tgl", "cab:tm:menu", "cab:q:tgl",
         "cab:tm:19:00", "cab:tm:c", "cab:ms:tgl",
         "att:full:20261024", "att:none:20261024", "att:partial:20261024", "att:t:1", "att:ok",
-        "home", "noop",
+        "home", "noop", "att:reset:20261024", "att2:y:1:20261024", "att2:n:2:20261024", "adm:ask", "adm:ask:day", "adm:ask:p:1",
         # админ-панель
         "adm", "adm:hw", "adm:hw:new", "adm:hw:l", "adm:hw:arc", f"adm:hw:d:{did}",
         f"adm:hw:i:{hid}", f"adm:hw:e:{hid}", f"adm:hw:f:{hid}:title", f"adm:hw:f:{hid}:due",

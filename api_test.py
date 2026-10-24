@@ -19,6 +19,9 @@ from bot.services import schedule_utils as su  # noqa: E402
 
 db.init()
 db.link_tg(db.student_by_fio("Аносов Владимир Сергеевич")["id"], 11111111)
+su.import_schedule_json(__import__("json").dumps({"weeks": [{"lessons": [
+    {"date": su.iso(su.today()), "start": "08:30", "end": "10:00", "discipline": "Математика", "lesson_type": "ПР", "room": "417"},
+]}]}, ensure_ascii=False))
 su.import_schedule_json(json.dumps({
     "weeks": [{"lessons": [
         {"date": "2026-10-23", "start": "08:30", "end": "10:00", "discipline": "Математика", "lesson_type": "ПР", "room": "417"},
@@ -102,6 +105,8 @@ async def main():
 
         r = await c.get("/api/attendance/today", headers=h)
         check("/api/attendance/today", r.status_code == 200 and "active" in r.json())
+        r = await c.post("/api/attendance/reset", headers=h)
+        check("/api/attendance/reset", r.status_code == 200, r.text[:100])
 
         r = await c.get("/api/admin/stats", headers=h)
         check("/api/admin/stats", r.status_code == 200 and r.json()["students_total"] == 25, r.text[:200])
@@ -122,6 +127,18 @@ async def main():
         r = await c.get("/api/admin/schedule/day/2026-11-02", headers=h)
         check("день удалён", r.json()["lessons"] == [])
 
+        r = await c.post("/api/admin/attendance/ask", json={"mode": "day"}, headers=h)
+        check("admin ask day", r.status_code == 200 and "sent" in r.json(), r.text[:100])
+        r = await c.post("/api/admin/attendance/ask", json={"mode": "pair", "pair_no": 1}, headers=h)
+        check("admin ask pair", r.status_code == 200, r.text[:150])
+        r = await c.post("/api/admin/day-notice", json={"date": "2026-11-04", "text": "Первая метка"}, headers=h)
+        check("метка 1", r.status_code == 200)
+        r = await c.post("/api/admin/day-notice", json={"date": "2026-11-05", "text": "Вторая метка"}, headers=h)
+        check("метка 2 (баг 500)", r.status_code == 200, r.text[:150])
+        r = await c.post("/api/admin/day-notice", json={"date": "2026-11-04", "text": "Повтор той же даты"}, headers=h)
+        check("метка повторно", r.status_code == 200, r.text[:150])
+        r = await c.delete("/api/admin/day-notice/2026-11-04", headers=h)
+        r = await c.delete("/api/admin/day-notice/2026-11-05", headers=h)
         r = await c.post("/api/admin/grades/sync", headers=h)
         check("sync без настроек → ok False с ошибкой", r.status_code == 200 and r.json()["ok"] is False)
 

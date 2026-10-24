@@ -283,6 +283,17 @@ def attendance_kb(day_iso: str) -> KB:
              BTN(text="❌ Не буду", callback_data=f"att:none:{d}")],
             [BTN(text="⚖️ Частично", callback_data=f"att:partial:{d}"),
              BTN(text="🤒 Заболел", callback_data=f"att:sick:{d}")],
+            [BTN(text="🗑 Сбросить мой ответ", callback_data=f"att:reset:{d}")],
+        ]
+    )
+
+
+def attendance_pair_kb(day_iso: str, pair_no: int) -> KB:
+    d = day_iso.replace("-", "")
+    return KB(
+        inline_keyboard=[
+            [BTN(text="✅ Буду", callback_data=f"att2:y:{pair_no}:{d}"),
+             BTN(text="❌ Не буду", callback_data=f"att2:n:{pair_no}:{d}")],
         ]
     )
 

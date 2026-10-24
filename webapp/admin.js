@@ -49,10 +49,33 @@
         <div class="drow"><div class="k">📖 Учебники</div><div class="v"><b>${st.textbooks}</b></div></div>
         <div class="drow"><div class="k">📋 Сегодня ответили</div><div class="v"><b>${st.attendance_today.answered}</b> / ${st.attendance_today.total}</div></div>
       </div>
+      <div class="card"><div class="card-title">Опрос посещаемости</div>
+        <div class="muted" style="font-size:12.5px;margin-bottom:8px">Придёт всем авторизованным, даже отметившимся</div>
+        <div class="btn-row">
+          <button class="btn" id="ask-day" style="margin:0">За весь день</button>
+          <button class="btn" id="ask-pair" style="margin:0">На пару…</button>
+        </div>
+      </div>
       <div class="card"><div class="card-title">🔁 Оценки (Google Таблица)</div>
         <div class="muted" style="font-size:12.5px;margin-bottom:8px">Последняя синхронизация: ${esc(sync)}</div>
         <button class="btn primary" id="sync-btn">🔄 Синхронизировать оценки</button>
       </div>`;
+    const askBtn = async (mode, pair_no) => {
+      try { const r = await api("/admin/attendance/ask", { method: "POST", body: { mode, pair_no } }); toast(`Разослано: ${r.sent}`); }
+      catch (e) { toast(e.message, true); }
+    };
+    $("#ask-day", body).addEventListener("click", async () => {
+      if (!(await confirmSheet("Разослать опрос за весь день всем?"))) return;
+      askBtn("day");
+    });
+    $("#ask-pair", body).addEventListener("click", async () => {
+      let pairs = [];
+      try { pairs = (await api("/today")).lessons; } catch (e) { toast("Сегодня пар нет", true); return; }
+      if (!pairs.length) { toast("Сегодня пар нет", true); return; }
+      A.sheetOptions("Какую пару?", pairs.map((x) => ({ label: `${x.pair_no} · ${x.start} ${x.discipline}`, value: x.pair_no })), (pn) => {
+        askBtn("pair", pn);
+      });
+    });
     $("#sync-btn", body).addEventListener("click", async (e) => {
       const b = e.currentTarget; b.disabled = true; b.textContent = "⏳ Синхронизирую…";
       try {
@@ -331,7 +354,8 @@
     body.innerHTML = A.skeleton(3);
     let day, discs;
     try { [day, discs] = await Promise.all([api(`/admin/schedule/day/${iso}`), api("/admin/disciplines")]); } catch (e) { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-    const lessons = day.lessons.map((l) => ({ ...l }));
+    // API отдаёт поле type — приводим к lesson_type, иначе типы терялись при сохранении
+    const lessons = day.lessons.map((l) => ({ ...l, lesson_type: l.type ?? l.lesson_type ?? null }));
 
     function draw() {
       body.innerHTML = `
@@ -372,10 +396,17 @@
       const disc = discs.find((d) => d.id === l.discipline_id) || discs[0];
       body.innerHTML = `
         <div class="section-head"><div><div class="section-title">Пара ${l.pair_no}</div><div class="section-sub">${fmtDate(iso)}</div></div></div>
-        <div class="field"><label>Дисциплина</label><button class="btn" id="p-disc" style="margin:0">${esc((disc.emoji || "📚") + " " + disc.name)}</button></div>
+        <div class="field"><label>Дисциплина</label><button class="btn" id="p-disc" style="margin:0">${esc(disc.name)}</button></div>
         <div class="field"><label>Тип</label><button class="btn" id="p-type" style="margin:0">${l.lesson_type || "— без типа"}</button></div>
         <div class="field"><label>Аудитория</label><input class="input" id="p-room" value="${esc(l.room || "")}" placeholder="415 / С/зал"></div>
         <div class="field"><label>Номер пары (стандартное время)</label><button class="btn" id="p-no" style="margin:0">${l.pair_no} · ${esc(l.start)}–${esc(l.end)}</button></div>
+        <div class="field"><label>Своё время (сокращённые пары)</label>
+          <div class="btn-row" style="margin:0">
+            <input class="input" id="p-t1" type="time" value="${esc(l.start)}" style="flex:1">
+            <input class="input" id="p-t2" type="time" value="${esc(l.end)}" style="flex:1">
+          </div>
+          <div class="stat-label" style="margin-top:4px">заполняется вместе с «Сохранить пару»</div>
+        </div>
         <button class="btn primary" id="p-save">💾 Сохранить пару</button>
         <button class="btn danger" id="p-del">🗑 Удалить пару</button>
         <button class="btn ghost" id="p-back">◀ К дню</button>`;
@@ -402,6 +433,8 @@
       $("#p-del", body).addEventListener("click", () => { lessons.splice(i, 1); draw(); });
       $("#p-save", body).addEventListener("click", async () => {
         l.room = $("#p-room", body).value.trim() || null;
+        const t1 = $("#p-t1", body).value, t2 = $("#p-t2", body).value;
+        if (t1 && t2) { l.start = t1; l.end = t2; }
         try {
           await api(`/admin/schedule/day/${iso}`, {
             method: "PUT",

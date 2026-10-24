@@ -1,3 +1,4 @@
+import json
 """Ответы студентов на опрос о посещаемости (весь день до конца последней пары).
 
 Порядок регистрации важен: специфичные кнопки (att:t:, att:ok, att:partial:)
@@ -9,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from .. import db
-from ..keyboards import attendance_kb, attendance_pick_kb
+from ..keyboards import attendance_kb, attendance_pair_kb, attendance_pick_kb
 from ..services import schedule_utils as su
 from ..states import AttSG
 
@@ -96,6 +97,77 @@ async def att_partial(cb: CallbackQuery, state: FSMContext):
         await cb.message.edit_text(
             "⚖️ <b>Отметьте пары, которые вы ПРОПУСТИТЕ</b> (нажимая на них), затем «✅ Подтвердить»:",
             reply_markup=attendance_pick_kb(day, lessons, set()),
+        )
+    except TelegramBadRequest:
+        pass
+
+
+# сброс своего ответа за день
+@router.callback_query(F.data.startswith("att:reset:"))
+async def att_reset(cb: CallbackQuery, student: dict, state: FSMContext):
+    day_raw = cb.data.split(":")[2]
+    if not (day_raw.isdigit() and len(day_raw) == 8):
+        await cb.answer()
+        return
+    day = _parse_day(day_raw)
+    err = _window_ok(day)
+    if err:
+        await cb.answer(err, show_alert=True)
+        return
+    db.reset_attendance(day, student["id"])
+    await state.clear()
+    await cb.answer("Ответ сброшен")
+    try:
+        await cb.message.edit_text(
+            f"<b>Посещаемость — {su.fmt_dmy(day)}</b>\n\n"
+            "Ответ сброшен. Отметьтесь заново кнопками ниже.",
+            reply_markup=attendance_kb(day),
+        )
+    except TelegramBadRequest:
+        pass
+
+
+# опрос на конкретную пару (att2:y/n:{pair}:{дата})
+@router.callback_query(F.data.startswith("att2:"))
+async def att2_answer(cb: CallbackQuery, student: dict):
+    parts = cb.data.split(":")  # att2, y/n, pair, дата
+    if len(parts) != 4 or parts[1] not in ("y", "n") or not parts[2].isdigit() or len(parts[3]) != 8:
+        await cb.answer()
+        return
+    will = parts[1] == "y"
+    pair_no = int(parts[2])
+    day = _parse_day(parts[3])
+    if day != su.iso(su.today()):
+        await cb.answer("Это опрос за прошедший день", show_alert=True)
+        return
+    lessons = db.day_lessons(day)
+    ls = next((x for x in lessons if x["pair_no"] == pair_no), None)
+    if ls is None:
+        await cb.answer("Пара не найдена", show_alert=True)
+        return
+    if su.now() > su.dt_on(day, ls["end"]):
+        await cb.answer("Эта пара уже закончилась", show_alert=True)
+        return
+
+    r = db.get_attendance(day, student["id"])
+    if r is None:
+        status, missing = ("partial", [pair_no]) if not will else ("full", [])
+        db.set_attendance(day, student["id"], status, missing, su.ts())
+    else:
+        missing = set(json.loads(r["missing_pairs"] or "[]"))
+        if will:
+            missing.discard(pair_no)
+        else:
+            missing.add(pair_no)
+        status = "full" if not missing else ("partial" if r["status"] in ("full", "partial") else r["status"])
+        db.set_attendance(day, student["id"], status, sorted(missing), su.ts())
+
+    word = "будете" if will else "не будете"
+    await cb.answer()
+    try:
+        await cb.message.edit_text(
+            f"<b>Пара {pair_no} — {su.esc(ls['discipline'])} ({ls['start']})</b>\n\n"
+            f"Записано: вы {word} на этой паре. Спасибо!",
         )
     except TelegramBadRequest:
         pass

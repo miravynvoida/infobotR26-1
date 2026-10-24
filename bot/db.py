@@ -576,6 +576,10 @@ def get_attendance(day_iso: str, sid: int) -> dict | None:
     return one("SELECT * FROM attendance WHERE date=? AND student_id=?", (day_iso, sid))
 
 
+def reset_attendance(day_iso: str, sid: int) -> None:
+    ex("DELETE FROM attendance WHERE date=? AND student_id=?", (day_iso, sid))
+
+
 def day_attendance(day_iso: str) -> list[dict]:
     return q(
         "SELECT a.*, s.fio FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.date=?",

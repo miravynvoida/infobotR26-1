@@ -274,28 +274,42 @@
   }
 
   let __timerInt = null;
-  function startPairTimer(lessons) {
+  function startPairTimer(lessons, dayDate) {
     if (__timerInt) { clearInterval(__timerInt); __timerInt = null; }
     const draw = () => {
       const el = $("#pair-timer");
       if (!el) { if (__timerInt) clearInterval(__timerInt); __timerInt = null; return; }
       const now = new Date();
-      const minsNow = now.getHours() * 60 + now.getMinutes();
-      const cur = (lessons || []).find((l) => {
-        const [sh, sm] = l.start.split(":").map(Number);
-        const [eh, em] = l.end.split(":").map(Number);
-        return minsNow >= sh * 60 + sm && minsNow < eh * 60 + em;
-      });
-      if (!cur) { el.innerHTML = ""; return; }
-      const [sh, sm] = cur.start.split(":").map(Number);
-      const [eh, em] = cur.end.split(":").map(Number);
-      const total = (eh * 60 + em) - (sh * 60 + sm);
-      const passed = minsNow - (sh * 60 + sm);
-      const left = total - passed;
-      el.innerHTML = `<div class="timer-card">
-        <div class="timer-top"><span>${esc(cur.discipline)} · идёт пара</span><b>до конца ${Math.floor(left / 60) ? Math.floor(left / 60) + " ч " : ""}${left % 60} мин</b></div>
-        <div class="timer-bar"><div style="width:${Math.min(100, Math.round((passed / total) * 100))}%"></div></div>
-      </div>`;
+      const minsNow = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+      const toMins = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+      const items = (lessons || []).map((l) => ({ ...l, s: toMins(l.start), e: toMins(l.end) }));
+      let html = "";
+      const cur = items.find((l) => minsNow >= l.s && minsNow < l.e);
+      const next = items.find((l) => l.s > minsNow);
+      if (!items.length) {
+        html = `<div class="timer-card"><div class="timer-top"><span>Сегодня пар нет</span></div></div>`;
+      } else if (cur) {
+        const total = cur.e - cur.s, passed = minsNow - cur.s, left = Math.max(0, Math.round(cur.e - minsNow));
+        const leftTxt = left >= 60 ? Math.floor(left / 60) + " ч " + (left % 60) + " мин" : left + " мин";
+        html = `<div class="timer-card">
+          <div class="timer-top"><span>${esc(cur.discipline)} · ${cur.pair_no} пара · идёт сейчас</span><b>до конца ${leftTxt} (${cur.end})</b></div>
+          <div class="timer-bar"><div style="width:${Math.min(100, Math.round((passed / total) * 100))}%"></div></div>
+        </div>`;
+      } else if (next) {
+        const wait = Math.round(next.s - minsNow);
+        const waitTxt = wait >= 60 ? Math.floor(wait / 60) + " ч " + (wait % 60) + " мин" : wait + " мин";
+        const prevEnd = Math.max(...items.filter((l) => l.e <= minsNow).map((l) => l.e), minsNow - 45);
+        const passed = (minsNow - prevEnd) / Math.max(1, next.s - prevEnd);
+        const label = items.every((l) => l.s > minsNow) ? "до первой пары" : "перемена · до следующей пары";
+        html = `<div class="timer-card">
+          <div class="timer-top"><span>${label}</span><b>${waitTxt} (${next.start})</b></div>
+          <div class="timer-bar"><div style="width:${Math.min(100, Math.round(passed * 100))}%"></div></div>
+          <div class="timer-next">${esc(next.discipline)}${next.room ? " · ауд. " + esc(next.room) : ""}</div>
+        </div>`;
+      } else {
+        html = `<div class="timer-card"><div class="timer-top"><span>На сегодня пар больше нет</span>🌙</div></div>`;
+      }
+      el.innerHTML = html;
     };
     draw();
     __timerInt = setInterval(draw, 30000);
@@ -351,7 +365,6 @@
         <div class="tile wide" data-act="hw"><div class="tile-ico">${I.task}</div><div class="tile-body"><div class="tile-name">Домашнее задание</div><div class="tile-sub">${newHw === 1 ? "1 новое" : newHw ? newHw + " новых" : "всё просмотрено"}</div></div>${newHw ? `<div class="dot">${newHw}</div>` : ""}</div>
         <div class="tile wide" data-act="tb"><div class="tile-ico">${I.book}</div><div class="tile-body"><div class="tile-name">Учебники</div><div class="tile-sub">материалы дисциплин</div></div></div>
       </div>
-      <div class="status-line" id="today-status">${today.status_text}</div>
       <div id="pair-timer"></div>`;
 
     if (att.active && !att.response) {
@@ -368,7 +381,8 @@
       </div>`;
     } else if (att.active && att.response) {
       const labels = { full: "Вы будете на всех парах", none: "Вас сегодня не будет", sick: "Вы болеете", partial: "Вы будете частично" };
-      html += `<div class="att-card"><div class="att-q">${labels[att.response.status] || ""}</div></div>`;
+      html += `<div class="att-card"><div class="att-q">${labels[att.response.status] || ""}</div>
+        <button class="btn sm ghost" id="att-reset">Сбросить мой ответ</button></div>`;
     }
 
     if (summ) {
@@ -388,6 +402,11 @@
       else if (act === "gr") showTab("grades");
     }));
     v.querySelectorAll("[data-att]").forEach((b) => b.addEventListener("click", () => answerAttendance(b.dataset.att, att)));
+    const attReset = $("#att-reset");
+    if (attReset) attReset.addEventListener("click", async () => {
+      try { await api("/attendance/reset", { method: "POST", body: {} }); toast("Ответ сброшен — отметьтесь заново"); showTab("main"); }
+      catch (e) { toast(e.message, true); }
+    });
     const sumBtn = $("#staff-refresh");
     if (sumBtn) sumBtn.addEventListener("click", async () => {
       try { const s = await api("/attendance/summary"); const card = $("#staff-card-body"); if (card) card.innerHTML = staffSummaryBody(s); toast("Обновлено"); } catch (e) { toast(e.message, true); }
@@ -688,7 +707,7 @@
     box.innerHTML = '<div class="card">' + skeleton(4) + "</div>";
     let sort = box.dataset.sort || "avg";
     let r;
-    try { r = await api("/api/rating?sort=" + sort); } catch (e) { box.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+    try { r = await api("/rating?sort=" + sort); } catch (e) { box.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
     const sorts = [
       { k: "avg", label: "По успеваемости" },
       { k: "skips", label: "По пропускам (Н)" },
