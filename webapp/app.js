@@ -41,7 +41,7 @@
       <div class="boot">
         <div class="boot-logo">🛠</div>
         <div class="boot-title">Идут технические работы</div>
-        <div class="boot-sub">${until ? "Дневник студента вернётся до " + esc(until) : "Дневник студента скоро вернётся"}</div>
+        <div class="boot-sub">${until ? "до " + esc(until) : "скоро всё вернёмся"}</div>
       </div>`;
   }
 
@@ -272,7 +272,7 @@
     return `<div class="lesson">
       <div class="lesson-time"><div class="t1">${esc(l.start)}</div><div class="t2">${esc(l.end)}</div></div>
       <div class="lesson-body">
-        <div class="lesson-disc">${discChip(l.discipline)}<span>${esc(l.discipline)}</span>${badges.join("")}</div>
+        <div class="lesson-disc"><span>${esc(l.discipline)}</span>${badges.join("")}</div>
         ${meta ? `<div class="lesson-meta">${esc(meta)}</div>` : ""}
       </div></div>`;
   }
@@ -369,7 +369,7 @@
     let semCard = "";
     if (sem && sem.total) {
       semCard = `<div class="card sem-card">
-        <div class="timer-top"><span>Учебная неделя ${sem.week} из ${sem.total}${sem.perfect_week ? " · ✓ идеальная неделя" : ""}</span><b>${sem.pct}%</b></div>
+        <div class="timer-top"><span>Учебная неделя ${sem.week} из ${sem.total}</span><b>${sem.pct}%</b></div>
         <div class="timer-bar"><div style="width:${sem.pct}%"></div></div>
       </div>`;
     }
@@ -561,7 +561,7 @@
 
     const sem = state.me.semester || {};
     const semBar = sem && sem.total
-      ? `<div class="card sem-card"><div class="timer-top"><span>Учебная неделя ${sem.week} из ${sem.total}${sem.perfect_week ? " · ✓ идеальная неделя" : ""}</span><b>${sem.pct}%</b></div><div class="timer-bar"><div style="width:${sem.pct}%"></div></div></div>`
+      ? `<div class="card sem-card"><div class="timer-top"><span>Учебная неделя ${sem.week} из ${sem.total}</span><b>${sem.pct}%</b></div><div class="timer-bar"><div style="width:${sem.pct}%"></div></div></div>`
       : "";
     v.innerHTML = `
       <div class="section-head"><div>
@@ -647,7 +647,7 @@
       : `<div class="empty">Будущих пар по «${esc(discipline)}» не найдено</div>`;
     modal.innerHTML = `
       <div class="modal-head">
-        <div class="modal-title">${discChip(discipline)}<span>${esc(discipline)}</span></div>
+        <div class="modal-title"><span>${esc(discipline)}</span></div>
         <button class="icon-btn" data-close>✕</button>
       </div>
       <div class="modal-body">${items}</div>`;
@@ -692,8 +692,7 @@
         <button data-g="rating">Рейтинг группы</button>
       </div>
       <div id="grades-mine">
-      <div class="grades-cols">
-        <div class="stat-card grades-left"><div class="donut-wrap">
+      <div class="stat-card grades-top"><div class="donut-wrap">
           <div class="donut"><svg width="84" height="84">
             <circle cx="42" cy="42" r="36" stroke="var(--card-2)" stroke-width="6" fill="none"/>
             <circle cx="42" cy="42" r="36" stroke="var(--accent)" stroke-width="6" fill="none"
@@ -706,19 +705,17 @@
           <div class="hbo-row"><span>Б</span><b>${g.counts.b}</b></div>
           <div class="hbo-row"><span>О</span><b>${g.counts.o}</b></div>
         </div>
-        </div>
-        <div class="card grades-right"><div class="card-title">Все дисциплины</div>
+      </div>
+      <div class="card"><div class="card-title">Все дисциплины</div>
         ${g.disciplines.map((d) => `
           <div class="disc-row" data-disc="${d.id}">
             <div class="disc-head">
-              ${discChip(d.name)}
               <div class="disc-name">${esc(d.name)}${g.exam_week && riskIds.has(d.id) ? '<span class="risk-badge">риск</span>' : ""}</div>
               <div class="disc-avg">${fmtAvg(d.avg)}</div>
               <span class="chevron">${I.chev}</span>
             </div>
             <div class="disc-grades">${d.grades.length ? d.grades.map((x) => gradePill(x)).join("") : '<span class="muted" style="font-size:12.5px">Оценок пока нет</span>'}</div>
           </div>`).join("")}
-      </div>
       </div>
       </div>
       <div id="grades-rating" style="display:none"></div>`;
@@ -797,21 +794,21 @@
         <div class="set-row">
           <div><div class="set-name">О следующей паре</div><div class="set-sub">Перед каждой парой</div></div>
           <div class="set-ctrl">
-            <select class="mini-select" id="np-min">${[5, 10, 15, 30, 45, 60, 90].map((m) => `<option value="${m}" ${s.next_pair_min === m ? "selected" : ""}>${m} мин</option>`).join("")}</select>
+            <button class="mini-select" id="np-min-btn">за ${s.next_pair_min} мин ▾</button>
             <div class="switch ${s.next_pair ? "on" : ""}" id="np-sw"></div>
           </div>
         </div>
         <div class="set-row">
           <div><div class="set-name">Расписание на завтра</div><div class="set-sub">Вечером накануне</div></div>
           <div class="set-ctrl">
-            <select class="mini-select" id="tm-time">${["17:00", "18:00", "19:00", "20:00", "21:00", "22:00"].map((t) => `<option ${s.tomorrow_time === t ? "selected" : ""}>${t}</option>`).join("")}</select>
+            <button class="mini-select" id="tm-time-btn">${s.tomorrow_time} ▾</button>
             <div class="switch ${s.tomorrow ? "on" : ""}" id="tm-sw"></div>
           </div>
         </div>
         <div class="set-row">
           <div><div class="set-name">ДЗ на завтра</div><div class="set-sub">Отдельное напоминание, не зависит от расписания</div></div>
           <div class="set-ctrl">
-            <select class="mini-select" id="hw-tm-time">${["16:00", "17:00", "18:00", "19:00", "20:00", "21:00"].map((t) => `<option ${s.hw_tomorrow_time === t ? "selected" : ""}>${t}</option>`).join("")}</select>
+            <button class="mini-select" id="hw-tm-time-btn">${s.hw_tomorrow_time || "18:00"} ▾</button>
             <div class="switch ${s.hw_tomorrow ? "on" : ""}" id="hw-tm-sw"></div>
           </div>
         </div>
@@ -855,13 +852,27 @@
       e.currentTarget.classList.toggle("on", on); haptic("medium");
       me.settings.next_pair = on; await setSave({ next_pair: on });
     });
-    $("#np-min").addEventListener("change", async (e) => { me.settings.next_pair_min = +e.target.value; await setSave({ next_pair_min: +e.target.value, next_pair: true }); });
+    $("#np-min-btn").addEventListener("click", () => {
+      sheetOptions("Напомнить заранее", [5, 10, 15, 30, 45, 60, 90].map((m) => ({ label: m + " мин", value: m, on: m === me.settings.next_pair_min })), async (m) => {
+        me.settings.next_pair_min = m;
+        $("#np-min-btn").textContent = `за ${m} мин ▾`;
+        const sw = $("#np-sw"); if (sw && !sw.classList.contains("on")) { sw.classList.add("on"); me.settings.next_pair = true; }
+        await setSave({ next_pair_min: m, next_pair: true });
+      });
+    });
     $("#tm-sw").addEventListener("click", async (e) => {
       const on = !e.currentTarget.classList.contains("on");
       e.currentTarget.classList.toggle("on", on); haptic("medium");
       me.settings.tomorrow = on; await setSave({ tomorrow: on });
     });
-    $("#tm-time").addEventListener("change", async (e) => { me.settings.tomorrow_time = e.target.value; await setSave({ tomorrow_time: e.target.value, tomorrow: true }); });
+    $("#tm-time-btn").addEventListener("click", () => {
+      sheetOptions("Расписание на завтра — время", ["17:00", "18:00", "19:00", "20:00", "21:00", "22:00"].map((t) => ({ label: t, value: t, on: t === me.settings.tomorrow_time })), async (t) => {
+        me.settings.tomorrow_time = t;
+        $("#tm-time-btn").textContent = `${t} ▾`;
+        const sw = $("#tm-sw"); if (sw && !sw.classList.contains("on")) { sw.classList.add("on"); me.settings.tomorrow = true; }
+        await setSave({ tomorrow_time: t, tomorrow: true });
+      });
+    });
     $("#ms-sw").addEventListener("click", async (e) => {
       const on = !e.currentTarget.classList.contains("on");
       e.currentTarget.classList.toggle("on", on); haptic("medium");
@@ -880,10 +891,14 @@
       e.currentTarget.classList.toggle("on", on); haptic("medium");
       me.settings.hw_tomorrow = on; await setSave({ hw_tomorrow: on });
     });
-    const hwtime = $("#hw-tm-time");
-    if (hwtime) hwtime.addEventListener("change", async (e) => {
-      me.settings.hw_tomorrow_time = e.target.value;
-      await setSave({ hw_tomorrow_time: e.target.value, hw_tomorrow: true });
+    const hwbtn = $("#hw-tm-time-btn");
+    if (hwbtn) hwbtn.addEventListener("click", () => {
+      sheetOptions("ДЗ на завтра — время", ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00"].map((t) => ({ label: t, value: t, on: t === (me.settings.hw_tomorrow_time || "18:00") })), async (t) => {
+        me.settings.hw_tomorrow_time = t;
+        $("#hw-tm-time-btn").textContent = `${t} ▾`;
+        const sw = $("#hw-tm-sw"); if (sw && !sw.classList.contains("on")) { sw.classList.add("on"); me.settings.hw_tomorrow = true; }
+        await setSave({ hw_tomorrow_time: t, hw_tomorrow: true });
+      });
     });
     document.querySelectorAll("#theme-seg button").forEach((b) => b.addEventListener("click", async () => {
       applyTheme(b.dataset.t); me.settings.theme = b.dataset.t;
