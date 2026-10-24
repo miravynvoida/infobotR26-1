@@ -18,7 +18,7 @@ MARK_MAP = {
 
 def parse_mark(raw: str) -> list[str]:
     out = []
-    for p in re.split(r"[,;/ ]+", (raw or "").strip()):
+    for p in re.split(r"[,;/\s]+", (raw or "").strip()):
         if not p:
             continue
         pl = p.lower().replace("ё", "е")

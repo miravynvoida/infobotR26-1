@@ -124,11 +124,15 @@ async def onb_tmrw(cb: CallbackQuery, state: FSMContext):
 
 @router.callback_query(OnbSG.tmrw, F.data.startswith("onb:tt:"))
 async def onb_tmrw_time(cb: CallbackQuery, state: FSMContext):
-    val = cb.data.split(":")[2]
+    # onb:tt:19:00 — время содержит двоеточие, склеиваем обратно
+    val = ":".join(cb.data.split(":")[2:])
     if val == "c":
         await state.set_state(OnbSG.tmrw_time)
         await cb.message.edit_text("✍️ Введите время в формате ЧЧ:ММ (например, 18:30):")
         await cb.answer()
+        return
+    if su.parse_hm(val) is None:
+        await cb.answer("Ошибка времени", show_alert=True)
         return
     await state.update_data(tomorrow=1, tomorrow_time=val)
     await cb.message.edit_text("3️⃣ Прочие уведомления (обновления и т.п.)?", reply_markup=onb_yes_no("onb:m"))

@@ -1,4 +1,4 @@
-"""Личный кабинет: статистика и настройки уведомлений."""
+"""Личный кабинет: статистика и настройки уведомлений. Фильтры без regexp_match."""
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
@@ -60,14 +60,6 @@ async def np_menu(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^cab:np:\d+$"))
-async def np_set(cb: CallbackQuery, student: dict):
-    minutes = int(cb.data.split(":")[2])
-    db.update_settings(student["id"], next_pair=1, next_pair_min=minutes)
-    await cb.answer(f"✅ Буду напоминать за {minutes} мин")
-    await render(cb, student)
-
-
 @router.callback_query(F.data == "cab:tm:tgl")
 async def tm_toggle(cb: CallbackQuery, student: dict):
     s = db.get_settings(student["id"])
@@ -85,15 +77,7 @@ async def tm_menu(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^cab:tm:\d{2}:\d{2}$"))
-async def tm_set(cb: CallbackQuery, student: dict):
-    parts = cb.data.split(":")
-    val = f"{parts[2]}:{parts[3]}"
-    db.update_settings(student["id"], tomorrow=1, tomorrow_time=val)
-    await cb.answer(f"✅ Буду присылать в {val}")
-    await render(cb, student)
-
-
+# точная кнопка «Другое время» — ДО generic-обработчика cab:tm:{HH:MM}
 @router.callback_query(F.data == "cab:tm:c")
 async def tm_custom(cb: CallbackQuery, state: FSMContext):
     await cb.answer()
@@ -102,6 +86,18 @@ async def tm_custom(cb: CallbackQuery, state: FSMContext):
         await cb.message.edit_text("✍️ Введите время в формате ЧЧ:ММ (например, 18:30):")
     except TelegramBadRequest:
         pass
+
+
+@router.callback_query(F.data.startswith("cab:tm:"))
+async def tm_set(cb: CallbackQuery, student: dict):
+    parts = cb.data.split(":")
+    val = f"{parts[2]}:{parts[3]}" if len(parts) >= 4 else ""
+    if su.parse_hm(val) is None:
+        await cb.answer("Неверное время", show_alert=True)
+        return
+    db.update_settings(student["id"], tomorrow=1, tomorrow_time=val)
+    await cb.answer(f"✅ Буду присылать в {val}")
+    await render(cb, student)
 
 
 @router.message(CabSG.tmrw_time, F.text)
@@ -115,6 +111,22 @@ async def tm_custom_input(m: Message, state: FSMContext, student: dict, is_admin
     await m.answer(f"✅ Расписание на завтра будет приходить в {tm.strftime('%H:%M')}.")
     s = db.get_settings(student["id"])
     await m.answer(cab_html(student), reply_markup=cab_kb(s))
+
+
+# generic «cab:np:{мин}» — после точных cab:np:*
+@router.callback_query(F.data.startswith("cab:np:"))
+async def np_set(cb: CallbackQuery, student: dict):
+    raw = cb.data.split(":")[2]
+    if not raw.isdigit():
+        await cb.answer()
+        return
+    minutes = int(raw)
+    if minutes not in (5, 10, 15, 30, 45, 60, 90):
+        await cb.answer("Недопустимое значение", show_alert=True)
+        return
+    db.update_settings(student["id"], next_pair=1, next_pair_min=minutes)
+    await cb.answer(f"✅ Буду напоминать за {minutes} мин")
+    await render(cb, student)
 
 
 @router.callback_query(F.data == "cab:ms:tgl")

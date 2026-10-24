@@ -1,4 +1,5 @@
-aiogram>=3.22,<4
+aiogram==3.31.0
+magic-filter==1.0.12
 apscheduler>=3.10,<4
 python-dotenv>=1.0,<2
 fastapi>=0.115,<1

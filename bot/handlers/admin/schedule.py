@@ -198,7 +198,7 @@ async def admin_calendar(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:cal:\d{4}-\d{2}$"))
+@router.callback_query(F.data.startswith("asch:cal:"))
 async def admin_calendar_nav(cb: CallbackQuery):
     y, mth = cb.data.split(":")[2].split("-")
     kb = month_kb(int(y), int(mth), "asch:", su.iso(su.today()), ("◀ Управление расписанием", "adm:sch"))
@@ -209,7 +209,7 @@ async def admin_calendar_nav(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:d:\d{4}-\d{2}-\d{2}$"))
+@router.callback_query(F.data.startswith("asch:d:"))
 async def admin_day(cb: CallbackQuery):
     day_iso = cb.data.split(":")[2]
     await cb.answer()
@@ -219,7 +219,7 @@ async def admin_day(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:dn:\d{4}-\d{2}-\d{2}:-?1$"))
+@router.callback_query(F.data.startswith("asch:dn:"))
 async def admin_day_nav(cb: CallbackQuery):
     parts = cb.data.split(":")
     d = date.fromisoformat(parts[2]) + timedelta(days=int(parts[3]))
@@ -230,7 +230,7 @@ async def admin_day_nav(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:dx:\d{4}-\d{2}-\d{2}$"))
+@router.callback_query(F.data.startswith("asch:dx:"))
 async def admin_day_delete(cb: CallbackQuery):
     day_iso = cb.data.split(":")[2]
     db.delete_day(day_iso)
@@ -243,7 +243,7 @@ async def admin_day_delete(cb: CallbackQuery):
 
 # ------------------------------------------------------------------ редактор пары
 
-@router.callback_query(F.data.regexp_match(r"^asch:p:\d{4}-\d{2}-\d{2}:\d+$"))
+@router.callback_query(F.data.startswith("asch:p:"))
 async def pair_menu(cb: CallbackQuery):
     parts = cb.data.split(":")
     day_iso, pair_no = parts[2], int(parts[3])
@@ -258,20 +258,43 @@ async def pair_menu(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pf:.+:disc$"))
-async def pair_field_disc(cb: CallbackQuery):
-    # asch:pf:{iso}:{n}:disc
-    parts = cb.data.split(":")
+@router.callback_query(F.data.startswith("asch:pf:"))
+async def pair_field(cb: CallbackQuery, state: FSMContext):
+    """asch:pf:{iso}:{n}:{field} — единый диспетчер полей пары."""
+    parts = cb.data.split(":")  # asch, pf, iso, n, field
+    if len(parts) != 5:
+        await cb.answer()
+        return
+    day_iso, pair_no, field = parts[2], parts[3], parts[4]
+    if not pair_no.isdigit():
+        await cb.answer()
+        return
     await cb.answer()
-    await cb.message.edit_text(
-        "📐 Выберите дисциплину:", reply_markup=disc_grid_kb(f"asch:pd:{parts[3]}:{parts[4]}")
-    )
+
+    if field == "disc":
+        await cb.message.edit_text(
+            "📐 Выберите дисциплину:", reply_markup=disc_grid_kb(f"asch:pd:{day_iso}:{pair_no}")
+        )
+    elif field == "type":
+        await cb.message.edit_text("🏷 Тип занятия:", reply_markup=type_kb(f"asch:pt:{day_iso}:{pair_no}"))
+    elif field == "room":
+        await state.set_state(SchEdSG.room)
+        await state.update_data(iso=day_iso, pair_no=int(pair_no))
+        await cb.message.edit_text("🚪 Введите аудиторию (или «-» чтобы убрать):")
+    elif field == "time":
+        taken_note = "\n".join(f"{i+1} — {s}–{e}" for i, (s, e) in enumerate(su.PAIR_TIMES))
+        await cb.message.edit_text(
+            f"🕐 Выберите номер пары (стандартное время):\n{taken_note}",
+            reply_markup=pair_numbers_kb(day_iso, f"asch:pn:{day_iso}:{pair_no}"),
+        )
+    else:
+        await cb.answer("Неизвестное поле", show_alert=True)
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pd:.+:\d+:\d+$"))
+@router.callback_query(F.data.startswith("asch:pd:"))
 async def pair_set_disc(cb: CallbackQuery):
-    parts = cb.data.split(":")
-    day_iso, pair_no, did = parts[3], int(parts[4]), int(parts[5])
+    parts = cb.data.split(":")  # asch:pd:{iso}:{n}:{did}
+    day_iso, pair_no, did = parts[2], int(parts[3]), int(parts[4])
     if db.discipline_by_id(did) is None:
         await cb.answer("Не найдена", show_alert=True)
         return
@@ -281,17 +304,10 @@ async def pair_set_disc(cb: CallbackQuery):
     await cb.message.edit_text(pair_html(ls), reply_markup=pair_menu_kb(day_iso, pair_no))
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pf:.+:type$"))
-async def pair_field_type(cb: CallbackQuery):
-    parts = cb.data.split(":")
-    await cb.answer()
-    await cb.message.edit_text("🏷 Тип занятия:", reply_markup=type_kb(f"asch:pt:{parts[3]}:{parts[4]}"))
-
-
-@router.callback_query(F.data.regexp_match(r"^asch:pt:.+:\d+:(ПР|ЛЕК|ЛАБ|none)$"))
+@router.callback_query(F.data.startswith("asch:pt:"))
 async def pair_set_type(cb: CallbackQuery):
-    parts = cb.data.split(":")
-    day_iso, pair_no, lt = parts[3], int(parts[4]), parts[5]
+    parts = cb.data.split(":")  # asch:pt:{iso}:{n}:{тип}
+    day_iso, pair_no, lt = parts[2], int(parts[3]), parts[4]
     db.ex(
         "UPDATE schedule SET lesson_type=? WHERE date=? AND pair_no=?",
         (None if lt == "none" else lt, day_iso, pair_no),
@@ -299,16 +315,6 @@ async def pair_set_type(cb: CallbackQuery):
     await cb.answer("Обновлено")
     ls = get_pair(day_iso, pair_no)
     await cb.message.edit_text(pair_html(ls), reply_markup=pair_menu_kb(day_iso, pair_no))
-
-
-@router.callback_query(F.data.regexp_match(r"^asch:pf:.+:room$"))
-async def pair_field_room(cb: CallbackQuery, state: FSMContext):
-    parts = cb.data.split(":")
-    day_iso, pair_no = parts[3], int(parts[4])
-    await state.set_state(SchEdSG.room)
-    await state.update_data(iso=day_iso, pair_no=pair_no)
-    await cb.answer()
-    await cb.message.edit_text("🚪 Введите аудиторию (или «-» чтобы убрать):")
 
 
 @router.message(SchEdSG.room, F.text & ~F.text.startswith("/"))
@@ -325,18 +331,6 @@ async def pair_set_room(m: Message, state: FSMContext):
     await m.answer(pair_html(ls), reply_markup=pair_menu_kb(data["iso"], data["pair_no"]))
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pf:.+:time$"))
-async def pair_field_time(cb: CallbackQuery):
-    parts = cb.data.split(":")
-    day_iso, pair_no = parts[3], int(parts[4])
-    taken_note = "\n".join(f"{i+1} — {s}–{e}" for i, (s, e) in enumerate(su.PAIR_TIMES))
-    await cb.answer()
-    await cb.message.edit_text(
-        f"🕐 Выберите номер пары (стандартное время):\n{taken_note}",
-        reply_markup=pair_numbers_kb(day_iso, f"asch:pn:{day_iso}:{pair_no}"),
-    )
-
-
 def _time_custom_kb(day_iso: str, pair_no: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -346,10 +340,10 @@ def _time_custom_kb(day_iso: str, pair_no: int) -> InlineKeyboardMarkup:
     )
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pn:\d{4}-\d{2}-\d{2}:\d+:\d+$"))
+@router.callback_query(F.data.startswith("asch:pn:"))
 async def pair_set_number(cb: CallbackQuery):
-    parts = cb.data.split(":")
-    day_iso, old_no, new_no = parts[3], int(parts[4]), int(parts[5])
+    parts = cb.data.split(":")  # asch:pn:{iso}:{старый}:{новый}
+    day_iso, old_no, new_no = parts[2], int(parts[3]), int(parts[4])
     if new_no < 1 or new_no > 7:
         await cb.answer("Номер 1–7", show_alert=True)
         return
@@ -366,11 +360,11 @@ async def pair_set_number(cb: CallbackQuery):
     await cb.message.edit_text(pair_html(ls), reply_markup=pair_menu_kb(day_iso, new_no))
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pc:\d{4}-\d{2}-\d{2}:\d+$"))
+@router.callback_query(F.data.startswith("asch:pc:"))
 async def pair_time_custom(cb: CallbackQuery, state: FSMContext):
-    parts = cb.data.split(":")
+    parts = cb.data.split(":")  # asch:pc:{iso}:{n}
     await state.set_state(SchEdSG.time)
-    await state.update_data(iso=parts[3], pair_no=int(parts[4]))
+    await state.update_data(iso=parts[2], pair_no=int(parts[3]))
     await cb.answer()
     await cb.message.edit_text("✍️ Введите время в формате ЧЧ:ММ-ЧЧ:ММ (например 11:50-13:20):")
 
@@ -397,7 +391,7 @@ async def pair_set_time(m: Message, state: FSMContext):
     await m.answer(pair_html(ls), reply_markup=pair_menu_kb(data["iso"], data["pair_no"]))
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:px:\d{4}-\d{2}-\d{2}:\d+$"))
+@router.callback_query(F.data.startswith("asch:px:"))
 async def pair_delete(cb: CallbackQuery):
     parts = cb.data.split(":")
     day_iso, pair_no = parts[2], int(parts[3])
@@ -408,7 +402,7 @@ async def pair_delete(cb: CallbackQuery):
 
 # ------------------------------------------------------------------ добавление пары
 
-@router.callback_query(F.data.regexp_match(r"^asch:pa:\d{4}-\d{2}-\d{2}$"))
+@router.callback_query(F.data.startswith("asch:pa:"))
 async def add_pair_start(cb: CallbackQuery):
     day_iso = cb.data.split(":")[2]
     await cb.answer()
@@ -417,10 +411,10 @@ async def add_pair_start(cb: CallbackQuery):
     )
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pan:\d{4}-\d{2}-\d{2}:\d+$"))
+@router.callback_query(F.data.startswith("asch:pan:"))
 async def add_pair_number(cb: CallbackQuery, state: FSMContext):
-    parts = cb.data.split(":")
-    day_iso, n = parts[3], int(parts[4])
+    parts = cb.data.split(":")  # asch:pan:{iso}:{n}
+    day_iso, n = parts[2], int(parts[3])
     if get_pair(day_iso, n) is not None:
         await cb.answer("Этот номер уже занят", show_alert=True)
         return
@@ -430,10 +424,10 @@ async def add_pair_number(cb: CallbackQuery, state: FSMContext):
     await cb.message.edit_text("📐 Выберите дисциплину:", reply_markup=disc_grid_kb(f"asch:pad:{day_iso}:{n}"))
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pad:\d{4}-\d{2}-\d{2}:\d+:\d+$"))
+@router.callback_query(F.data.startswith("asch:pad:"))
 async def add_pair_disc(cb: CallbackQuery, state: FSMContext):
-    parts = cb.data.split(":")
-    day_iso, n, did = parts[3], int(parts[4]), int(parts[5])
+    parts = cb.data.split(":")  # asch:pad:{iso}:{n}:{did}
+    day_iso, n, did = parts[2], int(parts[3]), int(parts[4])
     if db.discipline_by_id(did) is None:
         await cb.answer("Не найдена", show_alert=True)
         return
@@ -442,10 +436,10 @@ async def add_pair_disc(cb: CallbackQuery, state: FSMContext):
     await cb.message.edit_text("🏷 Тип занятия:", reply_markup=type_kb(f"asch:pat:{day_iso}:{n}"))
 
 
-@router.callback_query(F.data.regexp_match(r"^asch:pat:\d{4}-\d{2}-\d{2}:\d+:(ПР|ЛЕК|ЛАБ|none)$"))
+@router.callback_query(F.data.startswith("asch:pat:"))
 async def add_pair_type(cb: CallbackQuery, state: FSMContext):
-    parts = cb.data.split(":")
-    lt = parts[5]
+    parts = cb.data.split(":")  # asch:pat:{iso}:{n}:{тип}
+    lt = parts[4]
     await state.update_data(new_type=None if lt == "none" else lt)
     await cb.answer()
     await cb.message.edit_text(

@@ -179,7 +179,7 @@
         setTimeout(() => closeFn(), 160);
       }));
     }
-    closeFn = sheetOpen(div);
+    const closeFn = sheetOpen(div);
     draw();
     div.addEventListener("click", (e) => {
       const day = e.target.closest(".cal-day[data-d]");
@@ -236,6 +236,11 @@
   }
 
   /* ---------- компоненты ---------- */
+  // Цветной чип с первой буквой дисциплины — вместо эмодзи (эмодзи на разных ОС разные)
+  function discChip(name) {
+    return `<span class="lchip">${esc(String(name || "?").trim().charAt(0).toUpperCase())}</span>`;
+  }
+
   function lessonCard(l) {
     const badges = [];
     if (l.type) badges.push(`<span class="badge ${l.type === "ЛЕК" ? "lek" : l.type === "ЛАБ" ? "lab" : ""}">${esc(l.type)}</span>`);
@@ -246,7 +251,7 @@
     return `<div class="lesson">
       <div class="lesson-time"><div class="t1">${esc(l.start)}</div><div class="t2">${esc(l.end)}</div></div>
       <div class="lesson-body">
-        <div class="lesson-disc"><span>${esc(l.emoji || "")} ${esc(l.discipline)}</span>${badges.join("")}</div>
+        <div class="lesson-disc">${discChip(l.discipline)}<span>${esc(l.discipline)}</span>${badges.join("")}</div>
         ${meta ? `<div class="lesson-meta">${esc(meta)}</div>` : ""}
       </div></div>`;
   }
@@ -282,36 +287,35 @@
 
     const hour = new Date().getHours();
     const hello = hour < 5 ? "Доброй ночи" : hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
+    const firstName = (state.me.fio || "").trim().split(" ")[1] || (state.me.fio || "").trim();
     const newHw = hw.total_new || 0;
 
     let html = `
       <div class="section-head"><div>
-        <div class="section-title">${hello}, ${esc((state.me.short || state.me.fio).split(" ")[0])}!</div>
+        <div class="section-title">${hello}, ${esc(firstName)}!</div>
         <div class="section-sub">${today.weekday}, ${fmtDate(today.date)}${today.week_number ? " · учебная неделя " + today.week_number : ""}</div>
       </div></div>
       ${profileCard(state.me)}
-      <div class="tiles">
-        <div class="tile" data-act="hw"><div class="tile-ico">${I.task}</div><div class="tile-name">ДЗ</div>${newHw ? `<div class="dot">${newHw}</div>` : ""}</div>
-        <div class="tile" data-act="tb"><div class="tile-ico">${I.book}</div><div class="tile-name">Учебники</div></div>
-        <div class="tile" data-act="sch"><div class="tile-ico">${I.cal}</div><div class="tile-name">Расписание</div></div>
-        <div class="tile" data-act="gr"><div class="tile-ico">${I.chart}</div><div class="tile-name">Оценки</div></div>
+      <div class="tiles tiles-2">
+        <div class="tile wide" data-act="hw"><div class="tile-ico">${I.task}</div><div class="tile-body"><div class="tile-name">Домашнее задание</div><div class="tile-sub">${newHw ? newHw + " новых" : "всё просмотрено"}</div></div>${newHw ? `<div class="dot">${newHw}</div>` : ""}</div>
+        <div class="tile wide" data-act="tb"><div class="tile-ico">${I.book}</div><div class="tile-body"><div class="tile-name">Учебники</div><div class="tile-sub">материалы дисциплин</div></div></div>
       </div>
       <div class="status-line" id="today-status">${today.status_text}</div>`;
 
     if (att.active && !att.response) {
       html += `<div class="att-card" id="att-card">
-        <div class="att-q">👋 Будете ли вы сегодня на парах?</div>
-        <div class="att-sub">Первая пара в ${esc(att.first_start)}. Ответ увидят староста и зам.</div>
+        <div class="att-q">Будете ли вы сегодня на парах?</div>
+        <div class="att-sub">Первая пара в ${esc(att.first_start)}. Ответ увидят староста и зам. Отметиться можно до конца последней пары.</div>
         <div class="att-grid">
-          <button class="btn sm" data-att="full">✅ Буду на всех</button>
-          <button class="btn sm" data-att="none">❌ Не буду</button>
-          <button class="btn sm" data-att="partial">⚖️ Частично</button>
-          <button class="btn sm" data-att="sick">🤒 Заболел</button>
+          <button class="btn sm" data-att="full">Буду на всех</button>
+          <button class="btn sm" data-att="none">Не буду</button>
+          <button class="btn sm" data-att="partial">Частично</button>
+          <button class="btn sm" data-att="sick">Заболел</button>
         </div>
         <div id="att-extra" style="display:none;margin-top:10px"></div>
       </div>`;
     } else if (att.active && att.response) {
-      const labels = { full: "✅ Вы будете на всех парах", none: "❌ Вас сегодня не будет", sick: "🤒 Вы болеете", partial: "⚖️ Вы будете частично" };
+      const labels = { full: "Вы будете на всех парах", none: "Вас сегодня не будет", sick: "Вы болеете", partial: "Вы будете частично" };
       html += `<div class="att-card"><div class="att-q">${labels[att.response.status] || ""}</div></div>`;
     }
 
@@ -319,7 +323,7 @@
       html += staffSummaryCard(summ);
     }
 
-    html += `<div class="card"><div class="card-title">📅 Расписание на сегодня<span class="right">${today.lessons.length} пар</span></div>
+    html += `<div class="card"><div class="card-title">Расписание на сегодня<span class="right">${today.lessons.length} пар</span></div>
       <div id="today-lessons">${lessonsBlock(today.lessons, "Сегодня пар нет")}</div></div>`;
 
     v.innerHTML = html;
@@ -343,14 +347,14 @@
     let part = "—";
     if (s.partial && s.partial.length) part = s.partial.map((p) => `${esc(p[0])} (без ${esc(String(p[1]))} пар)`).join(", ");
     return `
-      <div class="drow"><div class="k">✅ На всех парах</div><div class="v">${s.full_count} чел.</div></div>
-      <div class="drow"><div class="k">❌ Не будут</div><div class="v">${list(s.none)}</div></div>
-      <div class="drow"><div class="k">⚖️ Частично</div><div class="v">${part}</div></div>
-      <div class="drow"><div class="k">🤒 Заболели</div><div class="v">${list(s.sick)}</div></div>
-      <div class="drow"><div class="k">❓ Не ответили</div><div class="v">${list(s.no_answer)}</div></div>`;
+      <div class="drow"><div class="k">На всех парах</div><div class="v">${s.full_count} чел.</div></div>
+      <div class="drow"><div class="k">Не будут</div><div class="v">${list(s.none)}</div></div>
+      <div class="drow"><div class="k">Частично</div><div class="v">${part}</div></div>
+      <div class="drow"><div class="k">Заболели</div><div class="v">${list(s.sick)}</div></div>
+      <div class="drow"><div class="k">Не ответили</div><div class="v">${list(s.no_answer)}</div></div>`;
   }
   function staffSummaryCard(s) {
-    return `<div class="card"><div class="card-title">📋 Сводка посещаемости<button class="mini-btn" id="staff-refresh" style="margin-left:auto">Обновить</button></div>
+    return `<div class="card"><div class="card-title">Сводка посещаемости<button class="mini-btn" id="staff-refresh" style="margin-left:auto">Обновить</button></div>
       <div class="detail-rows" id="staff-card-body">${staffSummaryBody(s)}</div></div>`;
   }
 
@@ -368,11 +372,11 @@
     extra.style.display = "block";
     extra.innerHTML = `<div class="att-sub" style="margin-top:8px">Отметьте пары, которые вы пропустите:</div>` +
       att.lessons.map((l) => `<button class="btn sm" style="text-align:left" data-pair="${l.pair_no}" data-sel="0">▫️ ${esc(l.pair_no)}. ${esc(l.start)} ${esc(l.discipline)}</button>`).join("") +
-      `<button class="btn primary sm" id="att-ok">✅ Подтвердить</button>`;
+      `<button class="btn primary sm" id="att-ok">Подтвердить</button>`;
     extra.querySelectorAll("[data-pair]").forEach((b) => b.addEventListener("click", () => {
       const on = b.dataset.sel === "1";
       b.dataset.sel = on ? "0" : "1";
-      b.textContent = (on ? "▫️" : "❌") + " " + b.textContent.slice(2).replace("❌ ", "").replace("▫️ ", "");
+      b.textContent = (on ? "◦ " : "× ") + " " + b.textContent.slice(2).replace("× ", "").replace("◦ ", "");
       b.style.opacity = on ? "1" : ".7";
       haptic("light");
     }));
@@ -442,7 +446,6 @@
     v.innerHTML = `
       <div class="section-head"><div>
         <div class="section-title">Расписание</div>
-        <div class="section-sub">${w ? "Учебная неделя " + w.n : "Нет загруженных недель"}</div>
       </div></div>
       <div class="sch-controls">
         <button class="select-btn" id="week-sel">${I.cal}<span>${w ? "Неделя " + w.n + " · " + fmtDateShort(w.start) + "–" + fmtDateShort(w.end) : "Выбрать неделю"}</span></button>
@@ -451,7 +454,7 @@
       </div>
       ${chips}
       <div class="card">
-        <div class="card-title">📅 ${selDay ? WD[new Date(selDay.date + "T00:00:00").getDay() === 0 ? 6 : new Date(selDay.date + "T00:00:00").getDay() - 1] + ", " + fmtDate(selDay.date) : ""}
+        <div class="card-title">${selDay ? WD[new Date(selDay.date + "T00:00:00").getDay() === 0 ? 6 : new Date(selDay.date + "T00:00:00").getDay() - 1] + ", " + fmtDate(selDay.date) : ""}
           <span class="right">${isToday ? "сегодня" : ""}</span></div>
         ${lessonsBlock(lessons, "На этот день расписания нет")}
       </div>`;
@@ -480,19 +483,42 @@
     // все дисциплины есть в /api/grades — используем как справочник
     let all;
     try { all = await api("/grades"); } catch (e) { toast(e.message, true); return; }
-    const list = all.disciplines.map((d) => ({ label: (d.emoji || "📚") + " " + d.name, value: d.id }));
-    sheetOptions("Найти следующую пару по дисциплине", list, async (id) => {
+    const list = all.disciplines.map((d) => ({ label: d.name, value: d.id }));
+    sheetOptions("Все будущие пары по дисциплине", list, async (id) => {
       try {
-        const r = await api("/schedule/next/" + id);
-        const box = $("#view");
-        const card = document.createElement("div");
-        card.className = "card mt8";
-        if (!r.lesson) card.innerHTML = `<div class="empty">По «${esc(r.discipline)}» будущих пар не найдено</div>`;
-        else card.innerHTML = `<div class="card-title">${I.search} Следующая пара — ${esc(r.discipline)}</div>
-          <div class="muted" style="font-size:12.5px;margin-bottom:6px">${esc(r.weekday)}, ${fmtDate(r.date)}</div>` + lessonCard(r.lesson);
-        box.prepend(card);
+        const r = await api(`/schedule/next/${id}?all=1`);
+        showLessonsModal(r.discipline, r.lessons || []);
       } catch (e) { toast(e.message, true); }
     });
+  }
+
+  function showLessonsModal(discipline, lessons) {
+    const root = $("#overlays");
+    const back = document.createElement("div");
+    back.className = "sheet-back";
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    const items = lessons.length
+      ? lessons.map((x) => `
+          <div class="modal-row">
+            <div class="modal-date">${esc(x.weekday)}, ${fmtDate(x.date)}</div>
+            ${lessonCard(x.lesson)}
+          </div>`).join("")
+      : `<div class="empty">Будущих пар по «${esc(discipline)}» не найдено</div>`;
+    modal.innerHTML = `
+      <div class="modal-head">
+        <div class="modal-title">${discChip(discipline)}<span>${esc(discipline)}</span></div>
+        <button class="icon-btn" data-close>✕</button>
+      </div>
+      <div class="modal-body">${items}</div>`;
+    root.appendChild(back); root.appendChild(modal);
+    requestAnimationFrame(() => { back.classList.add("open"); modal.classList.add("open"); });
+    const close = () => {
+      back.classList.remove("open"); modal.classList.remove("open");
+      setTimeout(() => { back.remove(); modal.remove(); }, 220);
+    };
+    back.addEventListener("click", close);
+    modal.querySelector("[data-close]").addEventListener("click", close);
   }
 
   /* ---------- Оценки ---------- */
@@ -501,7 +527,7 @@
     let g;
     try { g = await api("/grades"); } catch (e) { v.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
     const pct = g.avg == null ? 0 : Math.min(1, g.avg / 5);
-    const C = 2 * Math.PI * 34;
+    const C = 2 * Math.PI * 36;
     v.innerHTML = `
       <div class="section-head"><div>
         <div class="section-title">Оценки</div>
@@ -510,24 +536,23 @@
       <div class="stat-grid">
         <div class="stat-card"><div class="donut-wrap">
           <div class="donut"><svg width="84" height="84">
-            <circle cx="42" cy="42" r="34" stroke="var(--card-2)" stroke-width="9" fill="none"/>
-            <circle cx="42" cy="42" r="34" stroke="var(--accent)" stroke-width="9" fill="none"
+            <circle cx="42" cy="42" r="36" stroke="var(--card-2)" stroke-width="6" fill="none"/>
+            <circle cx="42" cy="42" r="36" stroke="var(--accent)" stroke-width="6" fill="none"
               stroke-linecap="round" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}"/>
           </svg><div class="donut-center"><b>${fmtAvg(g.avg)}</b><span>из 5</span></div></div>
           <div><div class="stat-num" style="font-size:19px">${g.total}</div><div class="stat-label">оценок всего</div></div>
         </div></div>
-        <div class="stat-card">
-          <div class="drow"><div class="k" style="width:auto">❌ Н</div><div class="v" style="text-align:right"><b>${g.counts.h}</b></div></div>
-          <div class="drow"><div class="k" style="width:auto">🤒 Б</div><div class="v" style="text-align:right"><b>${g.counts.b}</b></div></div>
-          <div class="drow"><div class="k" style="width:auto">⏰ О</div><div class="v" style="text-align:right"><b>${g.counts.o}</b></div></div>
-          <div class="stat-label" style="margin-top:6px">пропуски · болезни · опоздания</div>
+        <div class="stat-card hbo">
+          <div class="hbo-cell"><div class="stat-num">${g.counts.h}</div><div class="stat-label">Н — пропуски</div></div>
+          <div class="hbo-cell"><div class="stat-num">${g.counts.b}</div><div class="stat-label">Б — болезни</div></div>
+          <div class="hbo-cell"><div class="stat-num">${g.counts.o}</div><div class="stat-label">О — опоздания</div></div>
         </div>
       </div>
-      <div class="card"><div class="card-title">📚 Все дисциплины</div>
+      <div class="card"><div class="card-title">Все дисциплины</div>
         ${g.disciplines.map((d) => `
           <div class="disc-row" data-disc="${d.id}">
             <div class="disc-head">
-              <span>${esc(d.emoji || "📚")}</span>
+              ${discChip(d.name)}
               <div class="disc-name">${esc(d.name)}</div>
               <div class="disc-avg">${fmtAvg(d.avg)}</div>
               <span class="chevron">${I.chev}</span>
@@ -560,13 +585,13 @@
         <div class="section-sub">Профиль, уведомления и оформление</div>
       </div></div>
       ${profileCard(me)}
-      <div class="card"><div class="card-title">📊 Успеваемость</div>
+      <div class="card"><div class="card-title">Успеваемость</div>
         <div class="drow"><div class="k">Средний балл</div><div class="v"><b>${fmtAvg(me.stats.avg)}</b> (${me.stats.total} оценок)</div></div>
         <div class="drow"><div class="k">Пропуски (Н)</div><div class="v"><b>${me.stats.h}</b></div></div>
         <div class="drow"><div class="k">Болезни (Б)</div><div class="v"><b>${me.stats.b}</b></div></div>
         <div class="drow"><div class="k">Опоздания (О)</div><div class="v"><b>${me.stats.o}</b></div></div>
       </div>
-      <div class="card"><div class="card-title">🔔 Уведомления</div>
+      <div class="card"><div class="card-title">Уведомления</div>
         <div class="set-row">
           <div><div class="set-name">О следующей паре</div><div class="set-sub">Перед каждой парой</div></div>
           <div class="set-ctrl">
@@ -586,24 +611,24 @@
           <div class="set-ctrl"><div class="switch ${s.misc ? "on" : ""}" id="ms-sw"></div></div>
         </div>
         <div class="set-row">
-          <div><div class="set-name">🔒 Важные и новые ДЗ</div><div class="set-sub">Посещаемость тоже</div></div>
+          <div><div class="set-name">Важные и новые ДЗ</div><div class="set-sub">Посещаемость тоже</div></div>
           <div class="set-ctrl"><span class="locked">всегда включено</span></div>
         </div>
       </div>
-      <div class="card"><div class="card-title">🎨 Тема</div>
+      <div class="card"><div class="card-title">Тема</div>
         <div class="seg" id="theme-seg">
-          <button data-t="dark" class="${light ? "" : "on"}">🌑 Тёмная</button>
-          <button data-t="light" class="${light ? "on" : ""}">☀️ Светлая</button>
+          <button data-t="dark" class="${light ? "" : "on"}">Тёмная</button>
+          <button data-t="light" class="${light ? "on" : ""}">Светлая</button>
         </div>
       </div>
       ${me.is_admin ? `
-      <div class="card"><div class="card-title">🛠 Админ-панель</div>
+      <div class="card"><div class="card-title">Админ-панель</div>
         <div class="tiles" style="grid-template-columns:repeat(3,1fr)">
-          ${[["stats", "📊 Статистика"], ["hw", "📚 ДЗ"], ["schedule", "📅 Расписание"], ["students", "👥 Студенты"], ["disc", "📐 Дисциплины"], ["tb", "📖 Учебники"], ["bc", "📣 Рассылка"]].map((x) =>
+          ${[["stats", "Статистика"], ["hw", "ДЗ"], ["schedule", "Расписание"], ["students", "Студенты"], ["disc", "Дисциплины"], ["tb", "Учебники"], ["bc", "Рассылка"]].map((x) =>
             `<div class="tile" data-adm="${x[0]}"><div class="tile-name">${x[1]}</div></div>`).join("")}
         </div>
       </div>` : (me.is_staff ? `
-      <div class="card"><div class="card-title">📋 Сводка посещаемости</div>
+      <div class="card"><div class="card-title">Сводка посещаемости</div>
         <button class="btn" id="staff-sum-btn">Показать сводку за сегодня</button>
         <div id="staff-sum-body" class="mt8"></div>
       </div>` : "")}`;
@@ -677,10 +702,10 @@
       let hw;
       try { hw = await api("/homework"); } catch (e) { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
       if (!hw.groups.length) { body.innerHTML = `<div class="empty">📭 Актуальных заданий нет</div>`; return; }
-      body.innerHTML = `<div class="muted" style="font-size:12.5px;margin:0 2px 10px">Актуальные задания по дисциплинам. ✳️ — новое, ✅ — выполнено.</div>` +
+      body.innerHTML = `<div class="muted" style="font-size:12.5px;margin:0 2px 10px">Актуальные задания по дисциплинам. Пометка «новое» — непросмотренное, галочка — выполнено.</div>` +
         hw.groups.map((g) => `
           <div class="hw-group">
-            <div class="hw-group-head"><span>${esc(g.discipline.emoji || "📚")}</span> ${esc(g.discipline.name)}</div>
+            <div class="hw-group-head">${discChip(g.discipline.name)}<span>${esc(g.discipline.name)}</span></div>
             ${g.items.map((h) => hwItemHtml(h)).join("")}
           </div>`).join("");
       body.querySelectorAll(".hw-item[data-id]").forEach((el) => el.addEventListener("click", () => openHwDetail(parseInt(el.dataset.id, 10), body)));
@@ -692,10 +717,10 @@
       ${h.done ? `<span class="check">${I.check}</span>` : ""}
       <div class="hw-item-title">${esc(h.title)}</div>
       <div class="hw-item-meta">
-        ${h.due_date ? `<span>📅 до ${fmtDateShort(h.due_date)}</span>` : ""}
-        ${h.has_files ? `<span>📎 ${h.files.length}</span>` : ""}
+        ${h.due_date ? `<span>до ${fmtDateShort(h.due_date)}</span>` : ""}
+        ${h.has_files ? `<span>${h.files.length} файл(ов)</span>` : ""}
       </div>
-      ${h.new ? `<span class="newdot">✳️ новое</span>` : ""}
+      ${h.new ? `<span class="newdot">новое</span>` : ""}
     </div>`;
   }
 
@@ -706,19 +731,19 @@
     haptic("light");
     body.innerHTML = `
       <div class="detail-page">
-        <div class="muted" style="font-size:12.5px">${esc(h.discipline.emoji || "")} ${esc(h.discipline.name)}</div>
+        <div class="muted" style="font-size:12.5px">${esc(h.discipline.name)}</div>
         <div class="detail-title">${esc(h.title)}</div>
         <div class="detail-rows">
-          ${h.due_date ? `<div class="drow"><div class="k">📅 Сдать до</div><div class="v">${fmtDate(h.due_date)}${h.due_type ? ", к паре (" + esc(h.due_type) + ")" : ""}</div></div>` : ""}
-          ${h.published_at ? `<div class="drow"><div class="k">🕐 Публикация</div><div class="v">${esc(fmtPub(h.published_at))}</div></div>` : ""}
-          <div class="drow"><div class="k">📝 Задание</div><div class="v">${esc(h.task || "—")}</div></div>
-          ${h.explanation ? `<div class="drow"><div class="k">💡 Пояснение</div><div class="v">${esc(h.explanation)}</div></div>` : ""}
+          ${h.due_date ? `<div class="drow"><div class="k">Сдать до</div><div class="v">${fmtDate(h.due_date)}${h.due_type ? ", к паре (" + esc(h.due_type) + ")" : ""}</div></div>` : ""}
+          ${h.published_at ? `<div class="drow"><div class="k">Публикация</div><div class="v">${esc(fmtPub(h.published_at))}</div></div>` : ""}
+          <div class="drow"><div class="k">Задание</div><div class="v">${esc(h.task || "—")}</div></div>
+          ${h.explanation ? `<div class="drow"><div class="k">Пояснение</div><div class="v">${esc(h.explanation)}</div></div>` : ""}
         </div>
         ${h.has_files ? `
-          <div class="card-title mt14">📎 Материалы</div>
+          <div class="card-title mt14">Материалы</div>
           <div class="file-chips">${h.files.map((f) => `<div class="file-chip">${esc(f.name || f.type)}</div>`).join("")}</div>
           <button class="btn primary" id="hw-send">${I.send} Прислать все материалы в Telegram</button>` : ""}
-        <button class="btn ${h.done ? "" : "primary"}" id="hw-done">${h.done ? "↩️ Вернуть в работу" : "✅ Отметить выполненным"}</button>
+        <button class="btn ${h.done ? "" : "primary"}" id="hw-done">${h.done ? "Вернуть в работу" : "Отметить выполненным"}</button>
         <button class="btn ghost ov-sub-back">◀ К списку заданий</button>
       </div>`;
     body.querySelector(".ov-sub-back").addEventListener("click", () => openHomeworkListBack(body));
@@ -731,7 +756,7 @@
     $("#hw-done").addEventListener("click", async () => {
       try {
         const r = await api(`/homework/${hid}/done`, { method: "POST", body: { done: !h.done } });
-        toast(r.done ? "✅ Выполнено" : "↩️ Возвращено");
+        toast(r.done ? "Выполнено" : "Возвращено");
         openHomeworkListBack(body);
       } catch (e) { toast(e.message, true); }
     });
@@ -745,7 +770,7 @@
         let hw; try { hw = await api("/homework"); } catch (e) { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
         if (!hw.groups.length) { body.innerHTML = `<div class="empty">📭 Актуальных заданий нет</div>`; return; }
         body.innerHTML = hw.groups.map((g) => `
-          <div class="hw-group"><div class="hw-group-head"><span>${esc(g.discipline.emoji || "📚")}</span> ${esc(g.discipline.name)}</div>
+          <div class="hw-group"><div class="hw-group-head">${discChip(g.discipline.name)}<span>${esc(g.discipline.name)}</span></div>
           ${g.items.map((h) => hwItemHtml(h)).join("")}</div>`).join("");
         body.querySelectorAll(".hw-item[data-id]").forEach((el) => el.addEventListener("click", () => openHwDetail(parseInt(el.dataset.id, 10), body)));
       })();
@@ -762,11 +787,11 @@
     try { tbs = await api("/textbooks"); } catch (e) { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
     if (!tbs.groups.length) { body.innerHTML = `<div class="empty">📭 Учебников пока нет</div>`; return; }
     body.innerHTML = tbs.groups.map((g) => `
-      <div class="hw-group"><div class="hw-group-head"><span>${esc(g.discipline.emoji || "📚")}</span> ${esc(g.discipline.name)}</div>
+      <div class="hw-group"><div class="hw-group-head">${discChip(g.discipline.name)}<span>${esc(g.discipline.name)}</span></div>
       ${g.items.map((t) => `
         <div class="hw-item" data-tb="${t.id}">
           <div class="hw-item-title">${esc(t.title)}</div>
-          <div class="hw-item-meta">${t.files.length ? `<span>📎 ${t.files.length} файл(ов)</span>` : ""}${t.description ? `<span>${esc(t.description.slice(0, 60))}</span>` : ""}</div>
+          <div class="hw-item-meta">${t.files.length ? `<span>${t.files.length} файл(ов)</span>` : ""}${t.description ? `<span>${esc(t.description.slice(0, 60))}</span>` : ""}</div>
         </div>`).join("")}</div>`).join("");
     body.querySelectorAll("[data-tb]").forEach((el) => el.addEventListener("click", async () => {
       const id = parseInt(el.dataset.tb, 10);
@@ -774,11 +799,11 @@
       const t = g.items.find((i) => i.id === id);
       body.innerHTML = `
         <div class="detail-page">
-          <div class="muted" style="font-size:12.5px">${esc(g.discipline.emoji || "")} ${esc(g.discipline.name)}</div>
+          <div class="muted" style="font-size:12.5px">${esc(g.discipline.name)}</div>
           <div class="detail-title">${esc(t.title)}</div>
-          ${t.description ? `<div class="detail-rows"><div class="drow"><div class="k">📝 Описание</div><div class="v">${esc(t.description)}</div></div></div>` : ""}
+          ${t.description ? `<div class="detail-rows"><div class="drow"><div class="k">Описание</div><div class="v">${esc(t.description)}</div></div></div>` : ""}
           ${t.files.length ? `
-            <div class="card-title mt14">📎 Материалы</div>
+            <div class="card-title mt14">Материалы</div>
             <div class="file-chips">${t.files.map((f) => `<div class="file-chip">${esc(f.name || f.type)}</div>`).join("")}</div>
             <button class="btn primary" id="tb-send">${I.send} Прислать материалы в Telegram</button>` : `<div class="empty">Файлов нет</div>`}
           <button class="btn ghost" id="tb-back">◀ К списку</button>

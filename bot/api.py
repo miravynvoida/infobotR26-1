@@ -218,20 +218,43 @@ def api_schedule_day(day_iso: str, user: dict = Depends(cur)):
 
 
 @app.get("/api/schedule/next/{disc_id}")
-def api_next_lesson(disc_id: int, user: dict = Depends(cur)):
-    options = su.next_lesson_options(disc_id, limit=1)
+def api_next_lesson(disc_id: int, all: bool = False, user: dict = Depends(cur)):
     disc = db.discipline_by_id(disc_id)
-    if not options or disc is None:
-        return {"lesson": None, "discipline": disc["name"] if disc else None}
-    o = options[0]
-    lessons = [ls for ls in db.day_lessons(o["date"]) if ls["discipline_id"] == disc_id and ls["lesson_type"] == o["type"]]
-    ls = lessons[0] if lessons else None
+    if disc is None:
+        raise HTTPException(404, "Дисциплина не найдена")
+    n = su.now()
+    today_iso = su.iso(n.date())
+    rows = db.q(
+        "SELECT s.*, d.name AS discipline, d.emoji, d.teacher FROM schedule s "
+        "JOIN disciplines d ON d.id = s.discipline_id WHERE s.discipline_id=? AND s.date>=? "
+        "ORDER BY s.date, s.start",
+        (disc_id, today_iso),
+    )
+    # на сегодня оставляем только незаконченные пары
+    rows = [r for r in rows if r["date"] > today_iso or su.lesson_status(r, n) != "done"]
+
+    if all:
+        out = []
+        for r in rows:
+            out.append(
+                {
+                    "date": r["date"],
+                    "weekday": su.WEEKDAYS_FULL[date.fromisoformat(r["date"]).weekday()],
+                    "lesson": lesson_dict(r),
+                }
+            )
+        return {"discipline": disc["name"], "emoji": disc["emoji"], "lessons": out}
+
+    if not rows:
+        return {"discipline": disc["name"], "emoji": disc["emoji"], "lesson": None, "lessons": []}
+    first = rows[0]
     return {
         "discipline": disc["name"],
         "emoji": disc["emoji"],
-        "lesson": lesson_dict(ls) if ls else None,
-        "date": o["date"],
-        "weekday": su.WEEKDAYS_FULL[date.fromisoformat(o["date"]).weekday()],
+        "lesson": lesson_dict(first),
+        "date": first["date"],
+        "weekday": su.WEEKDAYS_FULL[date.fromisoformat(first["date"]).weekday()],
+        "lessons": [],
     }
 
 

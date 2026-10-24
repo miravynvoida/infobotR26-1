@@ -1,4 +1,9 @@
-"""Раздел «Домашнее задание» для студентов."""
+"""Раздел «Домашнее задание» для студентов.
+
+Важно: фильтры только точные/префиксные (без regexp_match) — так работает
+одинаково на любой версии aiogram. Порядок регистрации: точные → специфичные
+префиксы →-generic «hw:{id}» последним.
+"""
 import json
 
 from aiogram import Bot, F, Router
@@ -44,7 +49,7 @@ async def send_files_aiogram(bot: Bot, chat_id: int, files_json: str) -> int:
 
 def hw_detail_html(hw: dict) -> str:
     lines = [
-        f"📚 {hw['emoji']} <b>{su.esc(hw['discipline'])}</b>",
+        f"{hw['emoji']} <b>{su.esc(hw['discipline'])}</b>",
         "",
         f"🏷 <b>{su.esc(hw['title'])}</b>",
         f"📝 Задание: {su.esc(hw['task_text'])}",
@@ -92,7 +97,7 @@ async def open_homework(cb: CallbackQuery, student: dict):
 async def hw_menu(cb: CallbackQuery, student: dict):
     await cb.answer()
     unviewed = db.unviewed_hw_ids(student["id"])
-    kb = hw_menu_new_kb(unviewed) if unviewed else hw_menu_new_kb(set())
+    kb = hw_menu_new_kb(unviewed)
     text = (
         "📚 <b>Домашнее задание</b>\n\nВыберите дисциплину."
         if db.active_homework()
@@ -100,24 +105,6 @@ async def hw_menu(cb: CallbackQuery, student: dict):
     )
     try:
         await cb.message.edit_text(text + "\n\n✳️ — есть непросмотренное", reply_markup=kb)
-    except TelegramBadRequest:
-        pass
-
-
-@router.callback_query(F.data.startswith("hw:") & F.data.regexp_match(r"^hw:\d+$"))
-async def hw_disc(cb: CallbackQuery, student: dict):
-    disc_id = int(cb.data.split(":")[1])
-    disc = db.discipline_by_id(disc_id)
-    if disc is None:
-        await cb.answer("Дисциплина не найдена", show_alert=True)
-        return
-    await cb.answer()
-    done = db.done_hw_ids(student["id"])
-    try:
-        await cb.message.edit_text(
-            f"{disc['emoji']} <b>{su.esc(disc['name'])}</b> — задания:",
-            reply_markup=hw_list_kb(disc_id, done),
-        )
     except TelegramBadRequest:
         pass
 
@@ -136,7 +123,7 @@ async def hw_toggle_done(cb: CallbackQuery, student: dict):
         return
     done = hid in db.done_hw_ids(student["id"])
     db.set_hw_done(student["id"], hid, not done, su.ts())
-    await cb.answer("✅ Отмечено выполненным" if not done else "↩️ Вернуто в работу")
+    await cb.answer("✅ Отмечено выполненным" if not done else "↩️ Вернуло в работу")
     try:
         await cb.message.edit_text(
             hw_detail_html(hw),
@@ -167,5 +154,27 @@ async def hw_done_list(cb: CallbackQuery, student: dict):
         text = "📥 <b>Выполненные ДЗ</b>\n\n📭 Пока ничего не отмечено."
     try:
         await cb.message.edit_text(text, reply_markup=hw_done_list_kb(student["id"]))
+    except TelegramBadRequest:
+        pass
+
+
+# generic «hw:{disc_id}» — регистрируется ПОСЛЕДНИМ среди hw-кнопок
+@router.callback_query(F.data.startswith("hw:"))
+async def hw_disc(cb: CallbackQuery, student: dict):
+    disc_id_raw = cb.data.split(":")[1]
+    if not disc_id_raw.isdigit():
+        await cb.answer()
+        return
+    disc = db.discipline_by_id(int(disc_id_raw))
+    if disc is None:
+        await cb.answer("Дисциплина не найдена", show_alert=True)
+        return
+    await cb.answer()
+    done = db.done_hw_ids(student["id"])
+    try:
+        await cb.message.edit_text(
+            f"{disc['emoji']} <b>{su.esc(disc['name'])}</b> — задания:",
+            reply_markup=hw_list_kb(disc["id"], done),
+        )
     except TelegramBadRequest:
         pass

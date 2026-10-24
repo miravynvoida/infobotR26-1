@@ -110,6 +110,8 @@ check("parse_mark 5", parse_mark("5") == ["5"])
 check("parse_mark Н/Б/О", parse_mark("Н") == ["Н"] and parse_mark("б") == ["Б"] and parse_mark("o") == ["О"])
 check("parse_mark зачет", parse_mark("Зачет") == ["Зачет"] and parse_mark("незачет") == ["Незачет"])
 check("parse_mark 5,4", parse_mark("5,4") == ["5", "4"])
+check("parse_mark через дробь 5/5", parse_mark("5/5") == ["5", "5"])
+check("parse_mark через дробь 5/4/3", parse_mark("5/4/3") == ["5", "4", "3"])
 check("дата шапки", parse_header_date("23.10.2026") == "2026-10-23")
 
 print("== посещаемость ==")

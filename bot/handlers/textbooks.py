@@ -1,4 +1,4 @@
-"""Раздел «Учебники» для студентов."""
+"""Раздел «Учебники» для студентов. Фильтры без regexp_match."""
 import json
 
 from aiogram import F, Router
@@ -14,7 +14,7 @@ router = Router()
 
 
 def tb_detail_html(tb: dict) -> str:
-    lines = [f"📖 {tb['emoji']} <b>{su.esc(tb['discipline'])}</b>", "", f"🏷 <b>{su.esc(tb['title'])}</b>"]
+    lines = [f"{tb['emoji']} <b>{su.esc(tb['discipline'])}</b>", "", f"🏷 <b>{su.esc(tb['title'])}</b>"]
     if tb.get("description"):
         lines.append(f"📝 {su.esc(tb['description'])}")
     files = json.loads(tb.get("files") or "[]")
@@ -39,23 +39,6 @@ async def tb_menu(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^tb:\d+$"))
-async def tb_disc(cb: CallbackQuery):
-    disc_id = int(cb.data.split(":")[1])
-    disc = db.discipline_by_id(disc_id)
-    if disc is None:
-        await cb.answer("Дисциплина не найдена", show_alert=True)
-        return
-    await cb.answer()
-    try:
-        await cb.message.edit_text(
-            f"{disc['emoji']} <b>{su.esc(disc['name'])}</b> — учебники:",
-            reply_markup=tb_list_kb(disc_id),
-        )
-    except TelegramBadRequest:
-        pass
-
-
 @router.callback_query(F.data.startswith("tb:v:"))
 async def tb_view(cb: CallbackQuery):
     tid = int(cb.data.split(":")[2])
@@ -75,3 +58,24 @@ async def tb_view(cb: CallbackQuery):
         tb_detail_html(tb),
         reply_markup=tb_detail_kb(tid, tb["discipline_id"]),
     )
+
+
+# generic «tb:{disc_id}» — последним среди tb-кнопок
+@router.callback_query(F.data.startswith("tb:"))
+async def tb_disc(cb: CallbackQuery):
+    disc_id_raw = cb.data.split(":")[1]
+    if not disc_id_raw.isdigit():
+        await cb.answer()
+        return
+    disc = db.discipline_by_id(int(disc_id_raw))
+    if disc is None:
+        await cb.answer("Дисциплина не найдена", show_alert=True)
+        return
+    await cb.answer()
+    try:
+        await cb.message.edit_text(
+            f"{disc['emoji']} <b>{su.esc(disc['name'])}</b> — учебники:",
+            reply_markup=tb_list_kb(disc["id"]),
+        )
+    except TelegramBadRequest:
+        pass

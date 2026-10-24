@@ -69,7 +69,7 @@ async def tb_admin_menu(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^adm:tbd:\d+$"))
+@router.callback_query(F.data.startswith("adm:tbd:"))
 async def tb_disc_items(cb: CallbackQuery):
     disc_id = int(cb.data.split(":")[2])
     await cb.answer()
@@ -79,7 +79,7 @@ async def tb_disc_items(cb: CallbackQuery):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^adm:tbi:\d+$"))
+@router.callback_query(F.data.startswith("adm:tbi:"))
 async def tb_item(cb: CallbackQuery):
     t = db.textbook_by_id(int(cb.data.split(":")[2]))
     if t is None:
@@ -94,7 +94,7 @@ async def tb_item(cb: CallbackQuery):
 
 # ------------------------------------------------------------------ добавить
 
-@router.callback_query(F.data.regexp_match(r"^adm:tb:new:\d+$"))
+@router.callback_query(F.data.startswith("adm:tb:new:"))
 async def tb_new_start(cb: CallbackQuery, state: FSMContext):
     disc_id = int(cb.data.split(":")[3])
     await state.set_state(TbNewSG.title)
@@ -174,7 +174,7 @@ async def tb_new_finish(cb: CallbackQuery, state: FSMContext):
 
 # ------------------------------------------------------------------ редактировать
 
-@router.callback_query(F.data.regexp_match(r"^adm:tb:f:\d+:(title|desc)$"))
+@router.callback_query(F.data.startswith("adm:tb:f:"))
 async def tb_edit_field(cb: CallbackQuery, state: FSMContext):
     parts = cb.data.split(":")
     tid, field = int(parts[3]), parts[4]
@@ -203,7 +203,7 @@ async def tb_edit_input(m: Message, state: FSMContext):
     await m.answer(tb_html(t), reply_markup=tb_item_kb(t))
 
 
-@router.callback_query(F.data.regexp_match(r"^adm:tb:fl:\d+$"))
+@router.callback_query(F.data.startswith("adm:tb:fl:"))
 async def tb_files_menu(cb: CallbackQuery, state: FSMContext):
     tid = int(cb.data.split(":")[3])
     t = db.textbook_by_id(tid)
@@ -220,7 +220,7 @@ async def tb_files_menu(cb: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(TbEdSG.files, F.data.regexp_match(r"^atbd:\d+$"))
+@router.callback_query(TbEdSG.files, F.data.startswith("atbd:"))
 async def tb_file_toggle(cb: CallbackQuery, state: FSMContext):
     i = int(cb.data.split(":")[1])
     data = await state.get_data()
@@ -241,7 +241,7 @@ async def tb_file_toggle(cb: CallbackQuery, state: FSMContext):
         pass
 
 
-@router.callback_query(F.data.regexp_match(r"^atbfa:\d+$"))
+@router.callback_query(F.data.startswith("atbfa:"))
 async def tb_files_add(cb: CallbackQuery, state: FSMContext):
     tid = int(cb.data.split(":")[2])
     await state.set_state(TbEdSG.files)
@@ -272,7 +272,7 @@ async def tb_files_attach(m: Message, state: FSMContext):
     await state.update_data(files=files, fmsg=msg.message_id)
 
 
-@router.callback_query(F.data.regexp_match(r"^atbfw:\d+$"))
+@router.callback_query(F.data.startswith("atbfw:"))
 async def tb_files_apply(cb: CallbackQuery, state: FSMContext):
     tid = int(cb.data.split(":")[2])
     data = await state.get_data()
@@ -293,7 +293,7 @@ async def tb_files_apply(cb: CallbackQuery, state: FSMContext):
 
 # ------------------------------------------------------------------ удалить
 
-@router.callback_query(F.data.regexp_match(r"^adm:tb:delc:\d+$"))
+@router.callback_query(F.data.startswith("adm:tb:delc:"))
 async def tb_del_confirm(cb: CallbackQuery):
     tid = int(cb.data.split(":")[3])
     await cb.answer()
@@ -308,7 +308,7 @@ async def tb_del_confirm(cb: CallbackQuery):
     )
 
 
-@router.callback_query(F.data.regexp_match(r"^adm:tb:del:\d+$"))
+@router.callback_query(F.data.startswith("adm:tb:del:"))
 async def tb_delete(cb: CallbackQuery):
     tid = int(cb.data.split(":")[3])
     db.delete_textbook(tid)

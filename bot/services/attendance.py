@@ -7,15 +7,17 @@ from . import schedule_utils as su
 
 
 def ask_active(n: datetime | None = None) -> dict | None:
-    """Активен ли опрос «будете ли вы сегодня на парах» (от времени вопроса до начала 1-й пары)."""
+    """Активен ли опрос «будете ли вы сегодня на парах»: от времени вопроса
+    до конца последней пары дня (весь день можно изменить ответ)."""
     n = n or su.now()
     day = su.iso(n.date())
     lessons = db.day_lessons(day)
     if not lessons:
         return None
     first = su.dt_on(day, lessons[0]["start"])
+    last_end = su.dt_on(day, lessons[-1]["end"])
     ask_at = first - timedelta(minutes=config.cfg.attendance_ask_minutes)
-    if ask_at <= n <= first:
+    if ask_at <= n <= last_end:
         return {"date": day, "first_start": lessons[0]["start"], "lessons": lessons}
     return None
 

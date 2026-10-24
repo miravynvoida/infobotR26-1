@@ -171,10 +171,13 @@ async def disc_delete(cb: CallbackQuery):
     await cb.message.edit_text("📐 <b>Дисциплины</b>", reply_markup=disciplines_kb())
 
 
-@router.callback_query(F.data.regexp_match(r"^adm:di:\d+$"))
+@router.callback_query(F.data.startswith("adm:di:"))
 async def disc_view(cb: CallbackQuery):
-    did = int(cb.data.split(":")[2])
-    d = db.discipline_by_id(did)
+    did_raw = cb.data.split(":")[2]
+    if not did_raw.isdigit():
+        await cb.answer()
+        return
+    d = db.discipline_by_id(int(did_raw))
     if d is None:
         await cb.answer("Не найдена", show_alert=True)
         return

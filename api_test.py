@@ -60,6 +60,8 @@ async def main():
         r = await c.get("/api/today", headers=h)
         check("/api/today", r.status_code == 200 and "status_text" in r.json())
 
+        r = await c.get(f"/api/schedule/next/{did}?all=1", headers=h)
+        check("/api/schedule/next?all", r.status_code == 200 and isinstance(r.json()["lessons"], list), r.text[:120])
         r = await c.get("/api/schedule/weeks", headers=h)
         check("/api/schedule/weeks", r.status_code == 200 and len(r.json()["weeks"]) >= 1)
         wn = r.json()["weeks"][0]["n"]
